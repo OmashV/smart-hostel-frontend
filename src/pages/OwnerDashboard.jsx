@@ -70,12 +70,6 @@ export default function OwnerDashboard() {
 
   return (
     <div className="page-grid">
-      <FilterBar
-        roomId={roomId}
-        setRoomId={setRoomId}
-        forecastDays={forecastDays}
-        setForecastDays={setForecastDays}
-      />
 
       <div className="stats-grid">
         <StatCard title="Total Energy Today" value={formatKwh(kpis?.total_energy_today_kwh)} />
@@ -98,6 +92,14 @@ export default function OwnerDashboard() {
           </ComposedChart>
         </ResponsiveContainer>
       </SectionCard>
+
+      <FilterBar
+        roomId={roomId}
+        setRoomId={setRoomId}
+        forecastDays={forecastDays}
+        setForecastDays={setForecastDays}
+      />
+
 
       <SectionCard title="Forecast: Actual vs Predicted">
         <ResponsiveContainer width="100%" height={360}>
