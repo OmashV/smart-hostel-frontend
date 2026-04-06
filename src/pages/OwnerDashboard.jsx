@@ -10,21 +10,47 @@ import {
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis
+  YAxis,
+  BarChart
 } from "recharts";
 import {
-  getEnergyHistory,
   getEnergyForecast,
+  getOwnerAlerts,
   getOwnerKpis,
-  getTopWasteDays
+  getOwnerRoomComparison,
+  getTopWasteDays,
+  getEnergyHistory
 } from "../api/client";
 import { mergeHistoryWithForecast } from "../utils/chart";
-import { formatKwh } from "../utils/format";
+import { formatKwh, formatDate } from "../utils/format";
 import FilterBar from "../components/FilterBar";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import DataTable from "../components/DataTable";
 import LoadingState from "../components/LoadingState";
+
+function AlertCard({ alert }) {
+  const cls =
+    alert.severity === "Critical"
+      ? "alert-card critical"
+      : alert.severity === "Warning"
+      ? "alert-card warning"
+      : "alert-card info";
+
+  return (
+    <div className={cls}>
+      <div className="alert-title-row">
+        <strong>{alert.title}</strong>
+        <span className="alert-badge">{alert.severity}</span>
+      </div>
+      <p>{alert.message}</p>
+      <div className="alert-meta">
+        <span>{alert.room_id}</span>
+        <span>{formatDate(alert.captured_at)}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function OwnerDashboard() {
   const [roomId, setRoomId] = useState("A101");
@@ -34,26 +60,33 @@ export default function OwnerDashboard() {
   const [history, setHistory] = useState([]);
   const [forecast, setForecast] = useState([]);
   const [topWasteDays, setTopWasteDays] = useState([]);
+  const [roomComparison, setRoomComparison] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const [selectedDay, setSelectedDay] = useState(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const [kpiRes, historyRes, forecastRes, topWasteRes] = await Promise.all([
-          getOwnerKpis(roomId),
-          getEnergyHistory(roomId),
-          getEnergyForecast(roomId, forecastDays).catch(() => ({
-            history: [],
-            forecast: []
-          })),
-          getTopWasteDays(roomId)
-        ]);
+        const [kpiRes, historyRes, forecastRes, topWasteRes, roomCompRes, alertRes] =
+          await Promise.all([
+            getOwnerKpis(roomId),
+            getEnergyHistory(roomId),
+            getEnergyForecast(roomId, forecastDays).catch(() => ({
+              history: [],
+              forecast: []
+            })),
+            getTopWasteDays(roomId),
+            getOwnerRoomComparison(),
+            getOwnerAlerts()
+          ]);
 
         setKpis(kpiRes);
         setHistory(historyRes.history || []);
         setForecast(forecastRes.forecast || []);
         setTopWasteDays(topWasteRes.days || []);
+        setRoomComparison(roomCompRes.rooms || []);
+        setAlerts(alertRes.alerts || []);
       } finally {
         setLoading(false);
       }
@@ -70,17 +103,65 @@ export default function OwnerDashboard() {
 
   return (
     <div className="page-grid">
+      <FilterBar
+        roomId={roomId}
+        setRoomId={setRoomId}
+        forecastDays={forecastDays}
+        setForecastDays={setForecastDays}
+      />
 
       <div className="stats-grid">
         <StatCard title="Total Energy Today" value={formatKwh(kpis?.total_energy_today_kwh)} />
         <StatCard title="Wasted Energy Today" value={formatKwh(kpis?.wasted_energy_today_kwh)} />
-        <StatCard title="Critical Waste Events" value={kpis?.critical_waste_events_today ?? 0} />
-        <StatCard title="Forecast Horizon" value={`${forecastDays} days`} />
+        <StatCard title="Waste Ratio Today" value={`${kpis?.waste_ratio_today_percent ?? 0}%`} />
+        <StatCard title="Current Waste Status" value={kpis?.current_waste_status || "-"} />
       </div>
+
+      <div className="owner-top-grid">
+        <SectionCard title="Room-wise Waste Comparison">
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={roomComparison}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="room_id" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="total_energy_kwh" name="Total Energy" />
+              <Bar dataKey="wasted_energy_kwh" name="Wasted Energy" />
+            </BarChart>
+          </ResponsiveContainer>
+        </SectionCard>
+
+        <SectionCard title="Active Alerts">
+          <div className="alerts-list">
+            {alerts.length ? (
+              alerts.map((alert, idx) => <AlertCard key={idx} alert={alert} />)
+            ) : (
+              <p>No active owner-level alerts right now.</p>
+            )}
+          </div>
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Waste Ratio Comparison by Room">
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={roomComparison}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="room_id" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="waste_ratio_percent" name="Waste Ratio %" />
+          </BarChart>
+        </ResponsiveContainer>
+      </SectionCard>
 
       <SectionCard title="Energy Usage and Waste History">
         <ResponsiveContainer width="100%" height={360}>
-          <ComposedChart data={history} onClick={(state) => setSelectedDay(state?.activePayload?.[0]?.payload || null)}>
+          <ComposedChart
+            data={history}
+            onClick={(state) => setSelectedDay(state?.activePayload?.[0]?.payload || null)}
+          >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
             <YAxis />
@@ -92,14 +173,6 @@ export default function OwnerDashboard() {
           </ComposedChart>
         </ResponsiveContainer>
       </SectionCard>
-
-      <FilterBar
-        roomId={roomId}
-        setRoomId={setRoomId}
-        forecastDays={forecastDays}
-        setForecastDays={setForecastDays}
-      />
-
 
       <SectionCard title="Forecast: Actual vs Predicted">
         <ResponsiveContainer width="100%" height={360}>
@@ -123,7 +196,7 @@ export default function OwnerDashboard() {
             { key: "date", label: "Date" },
             { key: "total_energy_kwh", label: "Total Energy (kWh)" },
             { key: "wasted_energy_kwh", label: "Wasted Energy (kWh)" },
-            { key: "critical_waste_events", label: "Critical Events" }
+            { key: "waste_ratio_percent", label: "Waste Ratio (%)" }
           ]}
           rows={topWasteDays}
         />

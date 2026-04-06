@@ -9,6 +9,16 @@ export async function getOwnerKpis(roomId = "A101") {
   return data;
 }
 
+export async function getOwnerRoomComparison() {
+  const { data } = await api.get(`/rooms/owner/room-comparison`);
+  return data;
+}
+
+export async function getOwnerAlerts() {
+  const { data } = await api.get(`/rooms/owner/alerts`);
+  return data;
+}
+
 export async function getEnergyHistory(roomId = "A101") {
   const { data } = await api.get(`/rooms/${roomId}/energy/history`);
   return data;
