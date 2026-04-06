@@ -5,7 +5,6 @@ const items = [
   { to: "/warden", label: "Warden" },
   { to: "/security", label: "Security" },
   { to: "/student", label: "Student" },
-  { to: "/design-notes", label: "Design Notes" }
 ];
 
 export default function Sidebar() {
