@@ -9,6 +9,11 @@ export async function getOwnerKpis(roomId = "A101") {
   return data;
 }
 
+export async function getOwnerRoomsOverview() {
+  const { data } = await api.get(`/rooms/owner/rooms-overview`);
+  return data;
+}
+
 export async function getOwnerRoomComparison() {
   const { data } = await api.get(`/rooms/owner/room-comparison`);
   return data;

@@ -87,68 +87,173 @@
   }
 
   .owner-top-grid {
-  display: grid;
-  grid-template-columns: 2fr 1.1fr;
-  gap: 20px;
-}
-
-.alerts-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.alert-card {
-  border-radius: 14px;
-  padding: 14px;
-  border: 1px solid var(--line);
-}
-
-.alert-card.critical {
-  background: #fff1f2;
-  border-color: #fecdd3;
-}
-
-.alert-card.warning {
-  background: #fff7ed;
-  border-color: #fdba74;
-}
-
-.alert-card.info {
-  background: #eff6ff;
-  border-color: #93c5fd;
-}
-
-.alert-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.alert-badge {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  border: 1px solid var(--line);
-  background: white;
-}
-
-.alert-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 10px;
-}
-
-@media (max-width: 1100px) {
-  .owner-top-grid {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
   }
-}
+  
+  .owner-room-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+  }
+  
+  .owner-room-tile {
+    position: relative;
+    border-radius: 18px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  
+  .owner-room-tile.normal {
+    background: #eef9f0;
+    border-color: #b7ebc1;
+  }
+  
+  .owner-room-tile.warning {
+    background: #fff7ed;
+    border-color: #fdba74;
+  }
+  
+  .owner-room-tile.critical {
+    background: #fff1f2;
+    border-color: #fecdd3;
+  }
+  
+  .tile-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  
+  .tile-top h3 {
+    margin: 0;
+    font-size: 22px;
+  }
+  
+  .tile-subtext {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  
+  .tile-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  
+  .tile-dot.green {
+    background: #22c55e;
+  }
+  
+  .tile-dot.orange {
+    background: #f97316;
+  }
+  
+  .tile-dot.red {
+    background: #ef4444;
+  }
+  
+  .tile-alert-pill {
+    display: inline-block;
+    background: #e11d48;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  
+  .tile-metrics {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  
+  .tile-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  
+  .tile-badges {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .tile-footer {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  
+  .alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  
+  .alert-card {
+    border-radius: 14px;
+    padding: 14px;
+    border: 1px solid var(--line);
+  }
+  
+  .alert-card.critical {
+    background: #fff1f2;
+    border-color: #fecdd3;
+  }
+  
+  .alert-card.warning {
+    background: #fff7ed;
+    border-color: #fdba74;
+  }
+  
+  .alert-card.info {
+    background: #eff6ff;
+    border-color: #93c5fd;
+  }
+  
+  .alert-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  
+  .alert-badge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid var(--line);
+    background: white;
+  }
+  
+  .alert-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  
+  @media (max-width: 1100px) {
+    .owner-top-grid {
+      grid-template-columns: 1fr;
+    }
+  }
   
   .stats-grid {
     display: grid;
