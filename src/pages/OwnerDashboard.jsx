@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { HiOutlineExclamationTriangle, HiOutlineInformationCircle } from "react-icons/hi2";
+import { HiOutlineBolt, HiOutlineChartBarSquare, HiOutlineBuildingOffice2 } from "react-icons/hi2";
 import {
   Area,
   Brush,
@@ -36,10 +38,22 @@ function AlertCard({ alert }) {
       ? "alert-card warning"
       : "alert-card info";
 
+  const icon =
+    alert.severity === "Critical" ? (
+      <HiOutlineExclamationTriangle />
+    ) : alert.severity === "Warning" ? (
+      <HiOutlineExclamationTriangle />
+    ) : (
+      <HiOutlineInformationCircle />
+    );
+
   return (
     <div className={cls}>
       <div className="alert-title-row">
-        <strong>{alert.title}</strong>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "18px" }}>{icon}</span>
+          <strong>{alert.title}</strong>
+        </div>
         <span className="alert-badge">{alert.severity}</span>
       </div>
       <p>{alert.message}</p>
@@ -190,11 +204,19 @@ export default function OwnerDashboard() {
     () => mergeHistoryWithForecast(history, forecast),
     [history, forecast]
   );
+  const forecastLegendFormatter = (value) => {
+    const isPredicted = value.toLowerCase().includes("predicted");
+    return (
+      <span className={`legend-label ${isPredicted ? "predicted" : "actual"}`}>
+        {value}
+      </span>
+    );
+  };
 
   if (loading) return <LoadingState />;
 
   return (
-    <div className="page-grid">
+    <div className="page-grid owner-dashboard">
       <FilterBar
         roomId={roomId}
         setRoomId={setRoomId}
@@ -203,10 +225,34 @@ export default function OwnerDashboard() {
       />
 
       <div className="stats-grid">
-        <StatCard title="Total Energy Today" value={formatKwh(kpis?.total_energy_today_kwh)} />
-        <StatCard title="Wasted Energy Today" value={formatKwh(kpis?.wasted_energy_today_kwh)} />
-        <StatCard title="Waste Ratio Today" value={`${kpis?.waste_ratio_today_percent ?? 0}%`} />
-        <StatCard title="Current Waste Status" value={kpis?.current_waste_status || "-"} />
+        <StatCard
+          title="Total Energy Today"
+          value={formatKwh(kpis?.total_energy_today_kwh)}
+          subtitle="Current daily usage"
+          icon={<HiOutlineBolt />}
+          tone="orange"
+        />
+        <StatCard
+          title="Wasted Energy Today"
+          value={formatKwh(kpis?.wasted_energy_today_kwh)}
+          subtitle="Energy lost due to waste"
+          icon={<HiOutlineChartBarSquare />}
+          tone="purple"
+        />
+        <StatCard
+          title="Waste Ratio Today"
+          value={`${kpis?.waste_ratio_today_percent ?? 0}%`}
+          subtitle="Waste compared with total usage"
+          icon={<HiOutlineBuildingOffice2 />}
+          tone="green"
+        />
+        <StatCard
+          title="Current Waste Status"
+          value={kpis?.current_waste_status || "-"}
+          subtitle="Latest room waste condition"
+          icon={<HiOutlineExclamationTriangle />}
+          tone="red"
+        />
       </div>
 
       {roomId === "all" ? (
@@ -239,16 +285,32 @@ export default function OwnerDashboard() {
                   setSelectedDay(state?.activePayload?.[0]?.payload || null)
                 }
               >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
+                <XAxis dataKey="date" tick={{ fill: "#64748b" }} />
+                <YAxis tick={{ fill: "#64748b" }} />
+                <Tooltip
+                  contentStyle={{
+                    background: "#ffffff",
+                    border: "1px solid #dbe2ea",
+                    borderRadius: "12px",
+                    color: "#172033",
+                    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
+                  }}
+                />
                 <Legend />
-                <Area type="monotone" dataKey="total_energy_kwh" name="Total Energy" />
+                <Area
+                  type="monotone"
+                  dataKey="total_energy_kwh"
+                  name="Total Energy"
+                  stroke="#3b82f6"
+                  fill="#93c5fd"
+                  fillOpacity={0.28}
+                />
                 <Line
                   type="monotone"
                   dataKey="wasted_energy_kwh"
                   name="Wasted Energy"
+                  stroke="#f59e0b"
                   strokeWidth={2}
                 />
                 <Brush dataKey="date" height={24} travellerWidth={12} />
@@ -259,25 +321,52 @@ export default function OwnerDashboard() {
           <SectionCard title="Forecast: Actual vs Predicted">
             <ResponsiveContainer width="100%" height={360}>
               <ComposedChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Area type="monotone" dataKey="total_energy_kwh" name="Actual Energy" />
-                <Area type="monotone" dataKey="wasted_energy_kwh" name="Actual Waste" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
+                <XAxis dataKey="date" tick={{ fill: "#64748b" }} />
+                <YAxis tick={{ fill: "#64748b" }} />
+                <Tooltip
+                  contentStyle={{
+                    background: "#ffffff",
+                    border: "1px solid #dbe2ea",
+                    borderRadius: "12px",
+                    color: "#172033",
+                    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
+                  }}
+                />
+                <Legend formatter={forecastLegendFormatter} />
+                <Area
+                  type="monotone"
+                  dataKey="total_energy_kwh"
+                  name="Actual Energy"
+                  stroke="#3b82f6"
+                  fill="#93c5fd"
+                  fillOpacity={0.28}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="wasted_energy_kwh"
+                  name="Actual Waste"
+                  stroke="#f59e0b"
+                  fill="#fcd34d"
+                  fillOpacity={0.26}
+                />
                 <Line
                   type="monotone"
                   dataKey="predicted_total_energy_kwh"
                   name="Predicted Energy"
+                  stroke="#6366f1"
                   strokeWidth={2}
+                  strokeDasharray="10 6"
+                  dot={false}
                 />
                 <Line
                   type="monotone"
                   dataKey="predicted_wasted_energy_kwh"
                   name="Predicted Waste"
+                  stroke="#8b5cf6"
                   strokeWidth={2}
-                  strokeDasharray="6 6"
+                  strokeDasharray="2 7"
+                  dot={false}
                 />
               </ComposedChart>
             </ResponsiveContainer>
