@@ -26,7 +26,6 @@ import { formatDate, formatKwh } from "../utils/format";
 import FilterBar from "../components/FilterBar";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
-import DataTable from "../components/DataTable";
 import LoadingState from "../components/LoadingState";
 import StatusBadge from "../components/StatusBadge";
 
@@ -128,6 +127,26 @@ function OwnerRoomTile({ room }) {
   );
 }
 
+function BrushCircleHandle({ x, y, width, height }) {
+  const radius = 5;
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+
+  return (
+    <g>
+      <line
+        x1={cx}
+        y1={y + 4}
+        x2={cx}
+        y2={y + height - 4}
+        stroke="#94a3b8"
+        strokeWidth={1.2}
+      />
+      <circle cx={cx} cy={cy} r={radius} fill="#ffffff" stroke="#64748b" strokeWidth={1.4} />
+    </g>
+  );
+}
+
 export default function OwnerDashboard() {
   const [roomId, setRoomId] = useState("all");
   const [forecastDays, setForecastDays] = useState(5);
@@ -140,6 +159,10 @@ export default function OwnerDashboard() {
   const [alerts, setAlerts] = useState([]);
   const [roomsOverview, setRoomsOverview] = useState([]);
   const [selectedDay, setSelectedDay] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
 
   useEffect(() => {
     async function loadAllRoomsView() {
@@ -164,7 +187,7 @@ export default function OwnerDashboard() {
           total_energy_today_kwh: totalEnergy,
           wasted_energy_today_kwh: wastedEnergy,
           waste_ratio_today_percent: wasteRatio,
-          current_waste_status: `${highWasteRooms} High-Waste Rooms`
+          current_waste_status: `${highWasteRooms} High Waste Rooms`
         });
       } finally {
         setLoading(false);
@@ -181,7 +204,7 @@ export default function OwnerDashboard() {
             history: [],
             forecast: []
           })),
-          getTopWasteDays(roomId)
+          getTopWasteDays(roomId, 31).catch(() => ({ days: [] }))
         ]);
 
         setKpis(kpiRes);
@@ -199,11 +222,152 @@ export default function OwnerDashboard() {
       loadSingleRoomView();
     }
   }, [roomId, forecastDays]);
+  useEffect(() => {
+    if (!history.length) return;
+    const latest = history[history.length - 1];
+    const latestDate = new Date(latest.date);
+    if (!Number.isNaN(latestDate.getTime())) {
+      setCalendarMonth(new Date(latestDate.getFullYear(), latestDate.getMonth(), 1));
+    }
+    const key = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}-${String(
+      latestDate.getDate()
+    ).padStart(2, "0")}`;
+    setSelectedDay({
+      ...latest,
+      date: key
+    });
+  }, [history]);
 
   const chartData = useMemo(
     () => mergeHistoryWithForecast(history, forecast),
     [history, forecast]
   );
+  const historyByDate = useMemo(() => {
+    const toDateKey = (rawDate) => {
+      if (!rawDate) return "";
+      if (typeof rawDate === "string" && rawDate.length >= 10) return rawDate.slice(0, 10);
+      const parsed = new Date(rawDate);
+      if (Number.isNaN(parsed.getTime())) return "";
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, "0");
+      const d = String(parsed.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+
+    const topWasteByDate = (topWasteDays || []).reduce((acc, item) => {
+      const key = toDateKey(item.date);
+      if (!key) return acc;
+      acc[key] = item;
+      return acc;
+    }, {});
+    const latestHistoryDateKey = history.length ? toDateKey(history[history.length - 1]?.date) : "";
+    const currentKpiStatus = String(kpis?.current_waste_status || "").toLowerCase();
+    const kpiStatusNormalized =
+      currentKpiStatus.includes("critical")
+        ? "critical"
+        : currentKpiStatus.includes("warning")
+        ? "warning"
+        : currentKpiStatus.includes("normal")
+        ? "normal"
+        : "";
+
+    return history.reduce((acc, item) => {
+      const key = toDateKey(item.date);
+      if (!key) return acc;
+      const topWasteItem = topWasteByDate[key];
+      const total = Number(item.total_energy_kwh || 0);
+      const waste = Number(item.wasted_energy_kwh || 0);
+      const backendRatioRaw =
+        item.waste_ratio_percent !== undefined && item.waste_ratio_percent !== null
+          ? Number(item.waste_ratio_percent)
+          : topWasteItem?.waste_ratio_percent !== undefined &&
+            topWasteItem?.waste_ratio_percent !== null
+          ? Number(topWasteItem.waste_ratio_percent)
+          : null;
+      const ratio =
+        backendRatioRaw !== null && !Number.isNaN(backendRatioRaw)
+          ? Number(backendRatioRaw.toFixed(2))
+          : total > 0
+          ? Number(((waste / total) * 100).toFixed(2))
+          : 0;
+      const rawStatus = String(
+        item.waste_stat ||
+          item.waste_status ||
+          item.current_waste_status ||
+          topWasteItem?.waste_stat ||
+          topWasteItem?.waste_status ||
+          ""
+      )
+        .toLowerCase()
+        .trim();
+      const wasteStatus =
+        rawStatus === "critical"
+          ? "critical"
+          : rawStatus === "warning"
+          ? "warning"
+          : rawStatus === "normal" || rawStatus === "ok"
+          ? "normal"
+          : key === latestHistoryDateKey && kpiStatusNormalized
+          ? kpiStatusNormalized
+          : ratio >= 30
+          ? "critical"
+          : ratio >= 15
+          ? "warning"
+          : "normal";
+      acc[key] = {
+        ...item,
+        date: key,
+        waste_ratio_percent: ratio,
+        waste_status: wasteStatus
+      };
+      return acc;
+    }, {});
+  }, [history, topWasteDays, kpis]);
+  const calendarDays = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const first = new Date(year, month, 1);
+    const start = new Date(year, month, 1 - first.getDay());
+    return Array.from({ length: 42 }, (_, idx) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + idx);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+        date.getDate()
+      ).padStart(2, "0")}`;
+      return {
+        key,
+        date,
+        dayNumber: date.getDate(),
+        isCurrentMonth: date.getMonth() === month,
+        data: historyByDate[key] || null
+      };
+    });
+  }, [calendarMonth, historyByDate]);
+  const selectedDayData = selectedDay?.date ? historyByDate[selectedDay.date] || selectedDay : null;
+  const monthTitle = calendarMonth.toLocaleString("en-US", { month: "long", year: "numeric" });
+  const handleHistoryPointSelect = (entry) => {
+    if (entry?.activePayload?.[0]?.payload) {
+      const payload = entry.activePayload[0].payload;
+      setSelectedDay({
+        ...payload,
+        date: typeof payload.date === "string" ? payload.date.slice(0, 10) : payload.date
+      });
+      return;
+    }
+    if (entry?.payload) {
+      const payload = entry.payload;
+      setSelectedDay({
+        ...payload,
+        date: typeof payload.date === "string" ? payload.date.slice(0, 10) : payload.date
+      });
+      return;
+    }
+    setSelectedDay(null);
+  };
+  const handleCalendarDayClick = (day) => {
+    if (!day.data) return;
+    setSelectedDay(day.data);
+  };
   const forecastLegendFormatter = (value) => {
     const isPredicted = value.toLowerCase().includes("predicted");
     return (
@@ -242,7 +406,7 @@ export default function OwnerDashboard() {
         <StatCard
           title="Waste Ratio Today"
           value={`${kpis?.waste_ratio_today_percent ?? 0}%`}
-          subtitle="Waste compared with total usage"
+          subtitle="compared with total usage"
           icon={<HiOutlineBuildingOffice2 />}
           tone="green"
         />
@@ -279,15 +443,19 @@ export default function OwnerDashboard() {
         <>
           <SectionCard title="Energy Usage and Waste History">
             <ResponsiveContainer width="100%" height={360}>
-              <ComposedChart
-                data={history}
-                onClick={(state) =>
-                  setSelectedDay(state?.activePayload?.[0]?.payload || null)
-                }
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
-                <XAxis dataKey="date" tick={{ fill: "#64748b" }} />
-                <YAxis tick={{ fill: "#64748b" }} />
+              <ComposedChart className="history-chart" data={history} onClick={handleHistoryPointSelect}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e2e8f0" }}
+                />
+                <YAxis
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e2e8f0" }}
+                />
                 <Tooltip
                   contentStyle={{
                     background: "#ffffff",
@@ -298,22 +466,35 @@ export default function OwnerDashboard() {
                   }}
                 />
                 <Legend />
-                <Area
+                <Line
                   type="monotone"
                   dataKey="total_energy_kwh"
                   name="Total Energy"
-                  stroke="#3b82f6"
-                  fill="#93c5fd"
-                  fillOpacity={0.28}
+                  stroke="#2563eb"
+                  strokeWidth={2.6}
+                  dot={{ r: 3, fill: "#2563eb", strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  onClick={handleHistoryPointSelect}
                 />
                 <Line
                   type="monotone"
                   dataKey="wasted_energy_kwh"
                   name="Wasted Energy"
                   stroke="#f59e0b"
-                  strokeWidth={2}
+                  strokeWidth={2.2}
+                  dot={{ r: 3, fill: "#f59e0b", strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  onClick={handleHistoryPointSelect}
                 />
-                <Brush dataKey="date" height={24} travellerWidth={12} />
+                <Brush
+                  dataKey="date"
+                  height={16}
+                  travellerWidth={12}
+                  stroke="#cbd5e1"
+                  fill="#ffffff"
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  traveller={<BrushCircleHandle />}
+                />
               </ComposedChart>
             </ResponsiveContainer>
           </SectionCard>
@@ -372,28 +553,77 @@ export default function OwnerDashboard() {
             </ResponsiveContainer>
           </SectionCard>
 
-          <SectionCard title="Top Waste Days">
-            <DataTable
-              columns={[
-                { key: "date", label: "Date" },
-                { key: "total_energy_kwh", label: "Total Energy (kWh)" },
-                { key: "wasted_energy_kwh", label: "Wasted Energy (kWh)" },
-                { key: "waste_ratio_percent", label: "Waste Ratio (%)" }
-              ]}
-              rows={topWasteDays}
-            />
-          </SectionCard>
-
-          <SectionCard title="Selected Day Detail">
-            {selectedDay ? (
-              <div className="selected-day">
-                <p><strong>Date:</strong> {selectedDay.date}</p>
-                <p><strong>Total Energy:</strong> {formatKwh(selectedDay.total_energy_kwh)}</p>
-                <p><strong>Wasted Energy:</strong> {formatKwh(selectedDay.wasted_energy_kwh)}</p>
+          <SectionCard title="Monthly Waste Calendar">
+            <div className="owner-calendar-wrap">
+              <div className="owner-calendar-toolbar">
+                <button
+                  type="button"
+                  className="calendar-nav-btn"
+                  onClick={() =>
+                    setCalendarMonth(
+                      (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                    )
+                  }
+                >
+                  Prev
+                </button>
+                <strong>{monthTitle}</strong>
+                <button
+                  type="button"
+                  className="calendar-nav-btn"
+                  onClick={() =>
+                    setCalendarMonth(
+                      (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                    )
+                  }
+                >
+                  Next
+                </button>
               </div>
-            ) : (
-              <p>Click a day in the history chart to inspect it.</p>
-            )}
+
+              <div className="owner-calendar-weekdays">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+
+              <div className="owner-calendar-grid">
+                {calendarDays.map((day) => (
+                  <button
+                    key={day.key}
+                    type="button"
+                    disabled={!day.data}
+                    onClick={() => handleCalendarDayClick(day)}
+                    className={`calendar-day ${
+                      day.isCurrentMonth ? "current-month" : "other-month"
+                    } ${day.data ? `status-${day.data.waste_status}` : "status-empty"} ${
+                      selectedDayData?.date === day.key ? "active" : ""
+                    }`}
+                  >
+                    <span>{day.dayNumber}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="calendar-legend">
+                <span className="legend-item"><i className="dot status-normal" /> Normal</span>
+                <span className="legend-item"><i className="dot status-warning" /> Warning</span>
+                <span className="legend-item"><i className="dot status-critical" /> Critical</span>
+              </div>
+
+              <div className="selected-day">
+                {selectedDayData ? (
+                  <>
+                    <p><strong>Date:</strong> {selectedDayData.date}</p>
+                    <p><strong>Total Energy:</strong> {formatKwh(selectedDayData.total_energy_kwh)}</p>
+                    <p><strong>Wasted Energy:</strong> {formatKwh(selectedDayData.wasted_energy_kwh)}</p>
+                    <p><strong>Waste Ratio:</strong> {(selectedDayData.waste_ratio_percent ?? 0).toFixed(2)}%</p>
+                  </>
+                ) : (
+                  <p>Click a colored date to view energy and waste details.</p>
+                )}
+              </div>
+            </div>
           </SectionCard>
         </>
       )}
