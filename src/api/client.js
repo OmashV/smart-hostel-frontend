@@ -54,6 +54,16 @@ export async function getWardenNoiseIssues() {
   return data;
 }
 
+export async function getWardenInspectionQueue() {
+  const { data } = await api.get(`/rooms/warden/inspection-queue`);
+  return data;
+}
+
+export async function getWardenNoiseTrend(days = 7) {
+  const { data } = await api.get(`/rooms/warden/noise-trend?days=${days}`);
+  return data;
+}
+
 export async function getSecuritySummary() {
   const { data } = await api.get(`/rooms/security/summary`);
   return data;
