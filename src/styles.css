@@ -806,4 +806,107 @@ body {
     flex-direction: column;
     flex-wrap: nowrap;
   }
+
+  .warden-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.warden-page-title {
+  margin: 0;
+  font-size: 24px;
+}
+
+.warden-page-subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.warden-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.warden-refresh-note {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.warden-refresh-btn {
+  border: 1px solid var(--line);
+  background: white;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.warden-refresh-btn:hover {
+  background: #f8fafc;
+}
+
+.warden-error-box {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
+  padding: 14px 16px;
+  border-radius: 16px;
+}
+
+.room-tile-alert {
+  border-color: #fca5a5;
+  background: #fff8f8;
+}
+
+.room-tile-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.warden-room-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.warden-room-meta p {
+  margin: 6px 0;
+  font-size: 14px;
+}
+
+.warden-reasons-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.warden-pill {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.warden-pill.ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.warden-pill.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
 }
