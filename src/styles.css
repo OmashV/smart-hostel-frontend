@@ -806,66 +806,91 @@ body {
     flex-direction: column;
     flex-wrap: nowrap;
   }
-  .warden-header-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.warden-page-title {
-  margin: 0;
-  font-size: 24px;
-}
-
-.warden-page-subtitle {
-  margin: 6px 0 0;
-  color: var(--muted);
-}
-
-.warden-auto-refresh-note {
-  color: var(--muted);
-  font-size: 14px;
-  padding-top: 4px;
+  
 }
 
 .warden-filter-bar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 14px 18px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
   align-items: end;
 }
 
-.warden-search-wrap {
-  min-width: 220px;
-}
-
-.warden-search-box {
+.warden-filter-bar label {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  background: #fff;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.warden-filter-bar select {
+  background: #ffffff;
+  color: #172033;
+  border: 1px solid #d7dee8;
   border-radius: 10px;
-  padding: 0 10px;
-  min-height: 42px;
+  padding: 10px 12px;
+  min-width: 140px;
 }
 
-.warden-search-input {
-  min-width: 170px;
+/* KPI cards */
+.warden-kpi-button {
+  display: block;
   width: 100%;
-  padding: 10px 0;
+  padding: 0;
   border: none;
-  outline: none;
   background: transparent;
-}
-
-.warden-room-tile {
+  text-align: left;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  outline: none;
+  box-shadow: none;
 }
 
-.warden-room-tile:hover {
+.warden-kpi-button .stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.warden-kpi-button:hover .stat-card {
   transform: translateY(-2px);
   box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+/* Room tiles */
+.warden-room-tile {
+  cursor: default;
+}
+
+/* Alerts */
+.warden-alert-button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.warden-alert-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.warden-alert-button.critical {
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+
+.warden-alert-button.warning {
+  border-color: #fed7aa;
+  background: #fffaf0;
 }
 
 .alert-card-head {
@@ -892,10 +917,75 @@ body {
   margin-top: 12px;
   display: flex;
   justify-content: space-between;
-  color: var(--muted);
+  color: #64748b;
   font-size: 12px;
 }
 
+/* Modal */
+.warden-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.warden-modal {
+  width: min(960px, 100%);
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+}
+
+.warden-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 12px;
+}
+
+.warden-modal-head button {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+/* Single room cards */
+.warden-single-room-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.warden-single-room-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.warden-single-room-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.warden-single-room-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+/* Error */
 .warden-error-box {
   background: #fff1f2;
   border: 1px solid #fecdd3;
@@ -923,58 +1013,10 @@ body {
   background: #fff7f8;
 }
 
-.warden-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 1000;
-}
-
-.warden-modal {
-  width: min(900px, 100%);
-  background: #fff;
-  border-radius: 20px;
-  padding: 20px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
-}
-
-.warden-modal-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.warden-modal-head button {
-  border: 1px solid var(--line);
-  background: #fff;
-  padding: 10px 14px;
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.warden-modal-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.warden-modal-card {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 16px;
-  background: #f8fafc;
-}
-
+/* Warden responsive */
 @media (max-width: 980px) {
-  .warden-modal-grid {
+  .warden-single-room-grid {
     grid-template-columns: 1fr;
   }
 }
-}
-}
+
