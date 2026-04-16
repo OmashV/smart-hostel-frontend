@@ -6,7 +6,8 @@ import {
   HiOutlineMoon,
   HiOutlineSpeakerWave,
   HiOutlineWifi,
-  HiOutlineWrenchScrewdriver
+  HiOutlineWrenchScrewdriver,
+  HiOutlineMagnifyingGlass
 } from "react-icons/hi2";
 import {
   Bar,
@@ -48,8 +49,11 @@ function renderReasons(reasons = []) {
 }
 
 function getFloor(roomId = "") {
-  const match = String(roomId).match(/[A-Za-z]+|^\d+/);
-  return match ? match[0] : "Other";
+  const text = String(roomId).trim();
+  if (!text) return "Other";
+
+  const match = text.match(/^[A-Za-z]+|^\d+/);
+  return match ? match[0].toUpperCase() : "Other";
 }
 
 function WardenAlertCard({ alert }) {
@@ -111,6 +115,7 @@ function WardenRoomTile({ room, onSelect }) {
           <h3>{room.room_id}</h3>
           <p className="tile-subtext">Warden room overview</p>
         </div>
+
         <span
           className={`tile-dot ${
             severityClass === "critical"
@@ -171,6 +176,7 @@ export default function WardenDashboard() {
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const [selectedFloor, setSelectedFloor] = useState("All");
+  const [selectedRoomFilter, setSelectedRoomFilter] = useState("All");
   const [searchRoom, setSearchRoom] = useState("");
   const [onlyAttention, setOnlyAttention] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -226,10 +232,21 @@ export default function WardenDashboard() {
     return ["All", ...uniqueFloors];
   }, [rooms]);
 
+  const roomOptions = useMemo(() => {
+    const sorted = rooms
+      .map((room) => room.room_id)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    return ["All", ...sorted];
+  }, [rooms]);
+
   const filteredRooms = useMemo(() => {
     return rooms.filter((room) => {
       const matchFloor =
         selectedFloor === "All" || getFloor(room.room_id) === selectedFloor;
+
+      const matchRoom =
+        selectedRoomFilter === "All" || room.room_id === selectedRoomFilter;
 
       const matchSearch = room.room_id
         .toLowerCase()
@@ -237,9 +254,9 @@ export default function WardenDashboard() {
 
       const matchAttention = !onlyAttention || room.needs_inspection;
 
-      return matchFloor && matchSearch && matchAttention;
+      return matchFloor && matchRoom && matchSearch && matchAttention;
     });
-  }, [rooms, selectedFloor, searchRoom, onlyAttention]);
+  }, [rooms, selectedFloor, selectedRoomFilter, searchRoom, onlyAttention]);
 
   const activeAlerts = useMemo(() => {
     return inspectionQueue
@@ -252,7 +269,8 @@ export default function WardenDashboard() {
       .map((room) => ({
         room_id: room.room_id,
         severity: room.inspection_reasons.some((r) =>
-          r.toLowerCase().includes("critical") || r.toLowerCase().includes("violation")
+          r.toLowerCase().includes("critical") ||
+          r.toLowerCase().includes("violation")
         )
           ? "Critical"
           : "Warning",
@@ -269,7 +287,7 @@ export default function WardenDashboard() {
         (a, b) =>
           new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime()
       )
-      .slice(0, 8);
+      .slice(0, 12);
   }, [inspectionQueue]);
 
   if (loading) return <LoadingState />;
@@ -280,21 +298,25 @@ export default function WardenDashboard() {
         <div>
           <h2 className="warden-page-title">Warden Monitoring Dashboard</h2>
           <p className="warden-page-subtitle">
-            Live occupancy, active alerts, inspection priorities, and room-level drill-down.
+            Live occupancy, alerts, inspection priorities, and room-level drill-down.
           </p>
         </div>
+
         <div className="warden-auto-refresh-note">
           Auto-refresh every 8 seconds · Last updated:{" "}
           {lastUpdated ? formatDate(lastUpdated) : "-"}
         </div>
       </div>
 
-      <div className="filter-bar">
+      <div className="filter-bar warden-filter-bar">
         <label>
           Floor
           <select
             value={selectedFloor}
-            onChange={(e) => setSelectedFloor(e.target.value)}
+            onChange={(e) => {
+              setSelectedFloor(e.target.value);
+              setSelectedRoomFilter("All");
+            }}
           >
             {floors.map((floor) => (
               <option key={floor} value={floor}>
@@ -305,14 +327,31 @@ export default function WardenDashboard() {
         </label>
 
         <label>
+          Room
+          <select
+            value={selectedRoomFilter}
+            onChange={(e) => setSelectedRoomFilter(e.target.value)}
+          >
+            {roomOptions.map((roomId) => (
+              <option key={roomId} value={roomId}>
+                {roomId}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="warden-search-wrap">
           Search Room
-          <input
-            className="warden-search-input"
-            type="text"
-            placeholder="Type room id"
-            value={searchRoom}
-            onChange={(e) => setSearchRoom(e.target.value)}
-          />
+          <div className="warden-search-box">
+            <HiOutlineMagnifyingGlass size={16} />
+            <input
+              className="warden-search-input"
+              type="text"
+              placeholder="Type room id"
+              value={searchRoom}
+              onChange={(e) => setSearchRoom(e.target.value)}
+            />
+          </div>
         </label>
 
         <label>
@@ -329,7 +368,12 @@ export default function WardenDashboard() {
 
       {error ? (
         <div className="warden-error-box">
-          <strong>Dashboard error:</strong> {error}
+          <div>
+            <strong>Dashboard error:</strong> {error}
+          </div>
+          <button className="warden-retry-btn" onClick={load}>
+            Retry
+          </button>
         </div>
       ) : null}
 
@@ -436,9 +480,24 @@ export default function WardenDashboard() {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="warnings" name="Warnings" strokeWidth={2} />
-                <Line type="monotone" dataKey="violations" name="Violations" strokeWidth={2} />
-                <Line type="monotone" dataKey="total" name="Total Issues" strokeWidth={2} />
+                <Line
+                  type="monotone"
+                  dataKey="warnings"
+                  name="Warnings"
+                  strokeWidth={2}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="violations"
+                  name="Violations"
+                  strokeWidth={2}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  name="Total Issues"
+                  strokeWidth={2}
+                />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -447,7 +506,7 @@ export default function WardenDashboard() {
         </SectionCard>
       </div>
 
-      <SectionCard title="Recent Alerts">
+      <SectionCard title="Recent Alerts History">
         {recentAlerts.length ? (
           <DataTable
             columns={[
@@ -466,6 +525,11 @@ export default function WardenDashboard() {
                 key: "waste_stat",
                 label: "Waste",
                 render: (row) => <StatusBadge value={row.waste_stat} />
+              },
+              {
+                key: "sensor_faults",
+                label: "Sensor Faults",
+                render: (row) => renderFaults(row.sensor_faults)
               },
               {
                 key: "inspection_reasons",
