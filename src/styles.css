@@ -830,12 +830,32 @@ body {
   padding-top: 4px;
 }
 
+.warden-filter-bar {
+  align-items: end;
+}
+
+.warden-search-wrap {
+  min-width: 220px;
+}
+
+.warden-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 0 10px;
+  min-height: 42px;
+}
+
 .warden-search-input {
   min-width: 170px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
+  width: 100%;
+  padding: 10px 0;
+  border: none;
   outline: none;
+  background: transparent;
 }
 
 .warden-room-tile {
@@ -882,6 +902,25 @@ body {
   color: #9f1239;
   padding: 14px 16px;
   border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.warden-retry-btn {
+  border: 1px solid #fecdd3;
+  background: #fff;
+  color: #9f1239;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.warden-retry-btn:hover {
+  background: #fff7f8;
 }
 
 .warden-modal-overlay {
@@ -936,5 +975,6 @@ body {
   .warden-modal-grid {
     grid-template-columns: 1fr;
   }
+}
 }
 }
