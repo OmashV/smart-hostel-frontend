@@ -1,4 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  HiOutlineBellAlert,
+  HiOutlineExclamationTriangle,
+  HiOutlineHomeModern,
+  HiOutlineMoon,
+  HiOutlineSpeakerWave,
+  HiOutlineWifi,
+  HiOutlineWrenchScrewdriver,
+  HiOutlineMagnifyingGlass
+} from "react-icons/hi2";
 import {
   Bar,
   CartesianGrid,
@@ -38,6 +48,123 @@ function renderReasons(reasons = []) {
   return reasons.length ? reasons.join(", ") : "-";
 }
 
+function getFloor(roomId = "") {
+  const text = String(roomId).trim();
+  if (!text) return "Other";
+
+  const match = text.match(/^[A-Za-z]+|^\d+/);
+  return match ? match[0].toUpperCase() : "Other";
+}
+
+function WardenAlertCard({ alert }) {
+  const cls =
+    alert.severity === "Critical"
+      ? "alert-card critical"
+      : alert.severity === "Warning"
+      ? "alert-card warning"
+      : "alert-card info";
+
+  const icon =
+    alert.severity === "Critical" ? (
+      <HiOutlineExclamationTriangle size={18} />
+    ) : (
+      <HiOutlineBellAlert size={18} />
+    );
+
+  return (
+    <div className={cls}>
+      <div className="alert-card-head">
+        <div className="alert-card-title">
+          {icon}
+          <strong>{alert.title}</strong>
+        </div>
+        <StatusBadge value={alert.severity} />
+      </div>
+
+      <p className="alert-card-message">{alert.message}</p>
+
+      <div className="alert-card-foot">
+        <span>{alert.room_id}</span>
+        <span>{formatDate(alert.captured_at)}</span>
+      </div>
+    </div>
+  );
+}
+
+function WardenRoomTile({ room, onSelect }) {
+  const severityClass =
+    room.noise_stat === "Violation" || room.waste_stat === "Critical"
+      ? "critical"
+      : room.needs_inspection
+      ? "warning"
+      : "normal";
+
+  return (
+    <div
+      className={`owner-room-tile ${severityClass} warden-room-tile`}
+      onClick={() => onSelect(room)}
+      title="Click to view room details"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onSelect(room);
+      }}
+    >
+      <div className="tile-top">
+        <div>
+          <h3>{room.room_id}</h3>
+          <p className="tile-subtext">Warden room overview</p>
+        </div>
+
+        <span
+          className={`tile-dot ${
+            severityClass === "critical"
+              ? "red"
+              : severityClass === "warning"
+              ? "orange"
+              : "green"
+          }`}
+        />
+      </div>
+
+      {room.needs_inspection ? (
+        <span className="tile-alert-pill">
+          {room.inspection_reasons?.length || 1} Alert
+        </span>
+      ) : null}
+
+      <div className="tile-metrics">
+        <div className="tile-row">
+          <span>Occupancy</span>
+          <strong>{room.occupancy_stat}</strong>
+        </div>
+        <div className="tile-row">
+          <span>Noise</span>
+          <strong>{room.noise_stat}</strong>
+        </div>
+        <div className="tile-row">
+          <span>Waste</span>
+          <strong>{room.waste_stat}</strong>
+        </div>
+        <div className="tile-row">
+          <span>Current</span>
+          <strong>{room.current_amp} A</strong>
+        </div>
+      </div>
+
+      <div className="tile-badges">
+        <StatusBadge value={room.occupancy_stat} />
+        <StatusBadge value={room.noise_stat} />
+        <StatusBadge value={room.waste_stat} />
+      </div>
+
+      <div className="tile-footer">
+        Last Activity <span>{formatDate(room.captured_at)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function WardenDashboard() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState(null);
@@ -47,6 +174,12 @@ export default function WardenDashboard() {
   const [noiseTrend, setNoiseTrend] = useState([]);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
+
+  const [selectedFloor, setSelectedFloor] = useState("All");
+  const [selectedRoomFilter, setSelectedRoomFilter] = useState("All");
+  const [searchRoom, setSearchRoom] = useState("");
+  const [onlyAttention, setOnlyAttention] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState(null);
 
   async function load() {
     try {
@@ -84,7 +217,7 @@ export default function WardenDashboard() {
     async function init() {
       setLoading(true);
       await load();
-      intervalId = setInterval(load, 15000);
+      intervalId = setInterval(load, 8000);
     }
 
     init();
@@ -94,126 +227,325 @@ export default function WardenDashboard() {
     };
   }, []);
 
+  const floors = useMemo(() => {
+    const uniqueFloors = Array.from(new Set(rooms.map((room) => getFloor(room.room_id))));
+    return ["All", ...uniqueFloors];
+  }, [rooms]);
+
+  const roomOptions = useMemo(() => {
+    const sorted = rooms
+      .map((room) => room.room_id)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    return ["All", ...sorted];
+  }, [rooms]);
+
+  const filteredRooms = useMemo(() => {
+    return rooms.filter((room) => {
+      const matchFloor =
+        selectedFloor === "All" || getFloor(room.room_id) === selectedFloor;
+
+      const matchRoom =
+        selectedRoomFilter === "All" || room.room_id === selectedRoomFilter;
+
+      const matchSearch = room.room_id
+        .toLowerCase()
+        .includes(searchRoom.trim().toLowerCase());
+
+      const matchAttention = !onlyAttention || room.needs_inspection;
+
+      return matchFloor && matchRoom && matchSearch && matchAttention;
+    });
+  }, [rooms, selectedFloor, selectedRoomFilter, searchRoom, onlyAttention]);
+
+  const activeAlerts = useMemo(() => {
+    return inspectionQueue
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime()
+      )
+      .slice(0, 5)
+      .map((room) => ({
+        room_id: room.room_id,
+        severity: room.inspection_reasons.some((r) =>
+          r.toLowerCase().includes("critical") ||
+          r.toLowerCase().includes("violation")
+        )
+          ? "Critical"
+          : "Warning",
+        title: room.inspection_reasons[0] || "Needs attention",
+        message: renderReasons(room.inspection_reasons),
+        captured_at: room.captured_at
+      }));
+  }, [inspectionQueue]);
+
+  const recentAlerts = useMemo(() => {
+    return inspectionQueue
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime()
+      )
+      .slice(0, 12);
+  }, [inspectionQueue]);
+
   if (loading) return <LoadingState />;
 
   return (
-    <div className="page-grid">
-      <div className="warden-toolbar">
+    <div className="page-grid owner-dashboard">
+      <div className="warden-header-line">
         <div>
-          <h2 className="warden-page-title">Warden Operations Dashboard</h2>
+          <h2 className="warden-page-title">Warden Monitoring Dashboard</h2>
           <p className="warden-page-subtitle">
-            Monitors occupancy, noise, waste, faults, and rooms needing action.
+            Live occupancy, alerts, inspection priorities, and room-level drill-down.
           </p>
         </div>
 
-        <div className="warden-toolbar-right">
-          <span className="warden-refresh-note">
-            Last updated: {lastUpdated ? formatDate(lastUpdated) : "-"}
-          </span>
-          <button className="warden-refresh-btn" onClick={load}>
-            Refresh now
-          </button>
+        <div className="warden-auto-refresh-note">
+          Auto-refresh every 8 seconds · Last updated:{" "}
+          {lastUpdated ? formatDate(lastUpdated) : "-"}
         </div>
+      </div>
+
+      <div className="filter-bar warden-filter-bar">
+        <label>
+          Floor
+          <select
+            value={selectedFloor}
+            onChange={(e) => {
+              setSelectedFloor(e.target.value);
+              setSelectedRoomFilter("All");
+            }}
+          >
+            {floors.map((floor) => (
+              <option key={floor} value={floor}>
+                {floor}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Room
+          <select
+            value={selectedRoomFilter}
+            onChange={(e) => setSelectedRoomFilter(e.target.value)}
+          >
+            {roomOptions.map((roomId) => (
+              <option key={roomId} value={roomId}>
+                {roomId}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="warden-search-wrap">
+          Search Room
+          <div className="warden-search-box">
+            <HiOutlineMagnifyingGlass size={16} />
+            <input
+              className="warden-search-input"
+              type="text"
+              placeholder="Type room id"
+              value={searchRoom}
+              onChange={(e) => setSearchRoom(e.target.value)}
+            />
+          </div>
+        </label>
+
+        <label>
+          View
+          <select
+            value={onlyAttention ? "attention" : "all"}
+            onChange={(e) => setOnlyAttention(e.target.value === "attention")}
+          >
+            <option value="all">All Rooms</option>
+            <option value="attention">Needs Action Only</option>
+          </select>
+        </label>
       </div>
 
       {error ? (
         <div className="warden-error-box">
-          <strong>Dashboard error:</strong> {error}
+          <div>
+            <strong>Dashboard error:</strong> {error}
+          </div>
+          <button className="warden-retry-btn" onClick={load}>
+            Retry
+          </button>
         </div>
       ) : null}
 
       <div className="stats-grid">
-        <StatCard title="Occupied Rooms" value={summary?.occupied_rooms ?? 0} />
-        <StatCard title="Empty Rooms" value={summary?.empty_rooms ?? 0} />
-        <StatCard title="Sleeping Rooms" value={summary?.sleeping_rooms ?? 0} />
-        <StatCard title="Noise Issue Rooms" value={summary?.noise_issue_rooms ?? 0} />
         <StatCard
-          title="Rooms Needing Inspection"
-          value={summary?.rooms_needing_inspection ?? 0}
+          title="Occupied Rooms"
+          value={summary?.occupied_rooms ?? 0}
+          subtitle="Currently occupied rooms"
+          icon={<HiOutlineHomeModern />}
+          tone="blue"
         />
-        <StatCard title="Stale Rooms" value={summary?.stale_rooms ?? 0} />
+        <StatCard
+          title="Empty Rooms"
+          value={summary?.empty_rooms ?? 0}
+          subtitle="Rooms available right now"
+          icon={<HiOutlineHomeModern />}
+          tone="green"
+        />
+        <StatCard
+          title="Sleeping Rooms"
+          value={summary?.sleeping_rooms ?? 0}
+          subtitle="Detected sleeping state"
+          icon={<HiOutlineMoon />}
+          tone="purple"
+        />
+        <StatCard
+          title="Noise Issue Rooms"
+          value={summary?.noise_issue_rooms ?? 0}
+          subtitle="Warning or violation rooms"
+          icon={<HiOutlineSpeakerWave />}
+          tone="orange"
+        />
+        <StatCard
+          title="Needs Inspection"
+          value={summary?.rooms_needing_inspection ?? 0}
+          subtitle="Rooms requiring action"
+          icon={<HiOutlineWrenchScrewdriver />}
+          tone="red"
+        />
+        <StatCard
+          title="Stale Rooms"
+          value={summary?.stale_rooms ?? 0}
+          subtitle="Rooms with delayed updates"
+          icon={<HiOutlineWifi />}
+          tone="purple"
+        />
       </div>
 
-      <SectionCard title="Real-Time Room Status Grid">
-        {rooms.length ? (
-          <div className="status-grid">
-            {rooms.map((room) => (
-              <div
-                key={room.room_id}
-                className={`room-tile ${room.needs_inspection ? "room-tile-alert" : ""}`}
-              >
-                <div className="room-tile-top">
-                  <h3>{room.room_id}</h3>
-                  {room.needs_inspection ? (
-                    <span className="warden-pill danger">Needs inspection</span>
-                  ) : (
-                    <span className="warden-pill ok">Normal</span>
-                  )}
-                </div>
+      <div className="owner-top-grid">
+        <SectionCard title="Room Overview">
+          {filteredRooms.length ? (
+            <div className="owner-room-grid">
+              {filteredRooms.map((room) => (
+                <WardenRoomTile
+                  key={room.room_id}
+                  room={room}
+                  onSelect={setSelectedRoom}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="No rooms match the selected filters." />
+          )}
+        </SectionCard>
 
-                <div className="warden-room-badges">
-                  <StatusBadge value={room.occupancy_stat} />
-                  <StatusBadge value={room.noise_stat} />
-                  <StatusBadge value={room.waste_stat} />
-                  <StatusBadge value={room.door_status} />
-                </div>
+        <SectionCard title="Active Alerts">
+          {activeAlerts.length ? (
+            <div className="alerts-list">
+              {activeAlerts.map((alert, index) => (
+                <WardenAlertCard key={`${alert.room_id}-${index}`} alert={alert} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="No active alerts right now." />
+          )}
+        </SectionCard>
+      </div>
 
-                <div className="warden-room-meta">
-                  <p><strong>Current:</strong> {room.current_amp} A</p>
-                  <p><strong>Sound Peak:</strong> {room.sound_peak}</p>
-                  <p><strong>Faults:</strong> {renderFaults(room.sensor_faults)}</p>
-                  <p><strong>Stale Data:</strong> {room.stale_data ? "Yes" : "No"}</p>
-                  <p><strong>Updated:</strong> {formatDate(room.captured_at)}</p>
-                </div>
+      <div className="owner-top-grid">
+        <SectionCard title="Noise Issues by Room">
+          {noiseIssues.length ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={noiseIssues}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="room_id" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="warning_count" name="Warnings" />
+                <Bar dataKey="violation_count" name="Violations" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState text="No active noise issues right now." />
+          )}
+        </SectionCard>
 
-                {room.inspection_reasons?.length ? (
-                  <div className="warden-reasons-box">
-                    <strong>Inspection reasons:</strong>
-                    <div>{renderReasons(room.inspection_reasons)}</div>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
+        <SectionCard title="7-Day Noise Trend">
+          {noiseTrend.length ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={noiseTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="warnings"
+                  name="Warnings"
+                  strokeWidth={2}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="violations"
+                  name="Violations"
+                  strokeWidth={2}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  name="Total Issues"
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState text="No recent noise trend data available." />
+          )}
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Recent Alerts History">
+        {recentAlerts.length ? (
+          <DataTable
+            columns={[
+              { key: "room_id", label: "Room" },
+              {
+                key: "occupancy_stat",
+                label: "Occupancy",
+                render: (row) => <StatusBadge value={row.occupancy_stat} />
+              },
+              {
+                key: "noise_stat",
+                label: "Noise",
+                render: (row) => <StatusBadge value={row.noise_stat} />
+              },
+              {
+                key: "waste_stat",
+                label: "Waste",
+                render: (row) => <StatusBadge value={row.waste_stat} />
+              },
+              {
+                key: "sensor_faults",
+                label: "Sensor Faults",
+                render: (row) => renderFaults(row.sensor_faults)
+              },
+              {
+                key: "inspection_reasons",
+                label: "Alert Reason",
+                render: (row) => renderReasons(row.inspection_reasons)
+              },
+              {
+                key: "captured_at",
+                label: "Time",
+                render: (row) => formatDate(row.captured_at)
+              }
+            ]}
+            rows={recentAlerts}
+          />
         ) : (
-          <EmptyState text="No room status data available." />
-        )}
-      </SectionCard>
-
-      <SectionCard title="Noise Issues by Room">
-        {noiseIssues.length ? (
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={noiseIssues}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="room_id" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="warning_count" name="Warnings" />
-              <Bar dataKey="violation_count" name="Violations" />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <EmptyState text="No active noise issues right now." />
-        )}
-      </SectionCard>
-
-      <SectionCard title="7-Day Noise Trend">
-        {noiseTrend.length ? (
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={noiseTrend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="warnings" name="Warnings" />
-              <Line type="monotone" dataKey="violations" name="Violations" />
-              <Line type="monotone" dataKey="total" name="Total Issues" />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <EmptyState text="No recent noise trend data available." />
+          <EmptyState text="No recent alerts available." />
         )}
       </SectionCard>
 
@@ -237,13 +569,6 @@ export default function WardenDashboard() {
                 label: "Waste",
                 render: (row) => <StatusBadge value={row.waste_stat} />
               },
-              { key: "door_status", label: "Door" },
-              { key: "current_amp", label: "Current (A)" },
-              {
-                key: "stale_data",
-                label: "Stale",
-                render: (row) => (row.stale_data ? "Yes" : "No")
-              },
               {
                 key: "sensor_faults",
                 label: "Sensor Faults",
@@ -266,6 +591,46 @@ export default function WardenDashboard() {
           <EmptyState text="No rooms currently require inspection." />
         )}
       </SectionCard>
+
+      {selectedRoom ? (
+        <div className="warden-modal-overlay" onClick={() => setSelectedRoom(null)}>
+          <div className="warden-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="warden-modal-head">
+              <h3>Room Drill-Down: {selectedRoom.room_id}</h3>
+              <button onClick={() => setSelectedRoom(null)}>Close</button>
+            </div>
+
+            <div className="warden-modal-grid">
+              <div className="warden-modal-card">
+                <h4>Current Status</h4>
+                <div className="tile-badges">
+                  <StatusBadge value={selectedRoom.occupancy_stat} />
+                  <StatusBadge value={selectedRoom.noise_stat} />
+                  <StatusBadge value={selectedRoom.waste_stat} />
+                  <StatusBadge value={selectedRoom.door_status} />
+                </div>
+              </div>
+
+              <div className="warden-modal-card">
+                <h4>Measurements</h4>
+                <p><strong>Current:</strong> {selectedRoom.current_amp} A</p>
+                <p><strong>Sound Peak:</strong> {selectedRoom.sound_peak}</p>
+                <p><strong>Updated:</strong> {formatDate(selectedRoom.captured_at)}</p>
+              </div>
+
+              <div className="warden-modal-card">
+                <h4>Sensor Faults</h4>
+                <p>{renderFaults(selectedRoom.sensor_faults)}</p>
+              </div>
+
+              <div className="warden-modal-card">
+                <h4>Inspection Reasons</h4>
+                <p>{renderReasons(selectedRoom.inspection_reasons)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
