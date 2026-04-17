@@ -657,6 +657,21 @@ export default function WardenDashboard() {
       ? 1
       : 0;
 
+  const filteredForecasts = useMemo(() => {
+  if (selectedRoomFilter === "All") return wardenForecasts;
+  return wardenForecasts.filter((item) => item.room_id === selectedRoomFilter);
+}, [wardenForecasts, selectedRoomFilter]);
+
+const filteredAnomalies = useMemo(() => {
+  if (selectedRoomFilter === "All") return wardenAnomalies;
+  return wardenAnomalies.filter((item) => item.room_id === selectedRoomFilter);
+}, [wardenAnomalies, selectedRoomFilter]);
+
+const filteredPatterns = useMemo(() => {
+  if (selectedRoomFilter === "All") return wardenPatterns;
+  return wardenPatterns.filter((item) => item.room_id === selectedRoomFilter);
+}, [wardenPatterns, selectedRoomFilter]);
+
   if (loading) return <LoadingState />;
 
   return (
