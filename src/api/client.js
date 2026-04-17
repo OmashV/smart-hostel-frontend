@@ -113,3 +113,23 @@ export async function getStudentAlerts(roomId = "A101", limit = 20) {
   const { data } = await api.get(`/rooms/student/${roomId}/alerts?limit=${limit}`);
   return data;
 }
+
+export async function getWardenFeatureImportance() {
+  const res = await api.get("/rooms/warden/feature-importance");
+  return res.data;
+}
+
+export async function getWardenAnomalies() {
+  const res = await api.get("/rooms/warden/anomalies");
+  return res.data;
+}
+
+export async function getWardenPatterns() {
+  const res = await api.get("/rooms/warden/patterns");
+  return res.data;
+}
+
+export async function getWardenForecasts() {
+  const res = await api.get("/rooms/warden/forecasts");
+  return res.data;
+}
