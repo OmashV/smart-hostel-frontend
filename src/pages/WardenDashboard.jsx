@@ -1015,6 +1015,106 @@ const filteredPatterns = useMemo(() => {
         )}
       </SectionCard>
 
+      <SectionCard title={`Data Analysis & Insights - ${selectedRoomFilter}`}>
+  <div className="owner-top-grid">
+    <SectionCard title="Temporal Trend Forecast">
+      {filteredForecasts.length ? (
+        <DataTable
+          columns={[
+            { key: "room_id", label: "Room" },
+            {
+              key: "date",
+              label: "Forecast Time",
+              render: (row) => row.date || "-"
+            },
+            {
+              key: "predicted_warning_count",
+              label: "Predicted Warnings",
+              render: (row) => Number(row.predicted_warning_count || 0).toFixed(2)
+            },
+            {
+              key: "predicted_violation_count",
+              label: "Predicted Violations",
+              render: (row) => Number(row.predicted_violation_count || 0).toFixed(2)
+            },
+            {
+              key: "predicted_occupied_count",
+              label: "Predicted Occupancy",
+              render: (row) => Number(row.predicted_occupied_count || 0).toFixed(2)
+            }
+          ]}
+          rows={filteredForecasts.slice(0, 10)}
+        />
+      ) : (
+        <EmptyState text="No forecast data available." />
+      )}
+    </SectionCard>
+
+    <SectionCard title="Anomaly Detection">
+      {filteredAnomalies.length ? (
+        <DataTable
+          columns={[
+            { key: "room_id", label: "Room" },
+            { key: "status", label: "Status" },
+            { key: "reason", label: "Reason" },
+            {
+              key: "anomaly_score",
+              label: "Anomaly Score",
+              render: (row) => Number(row.anomaly_score || 0).toFixed(4)
+            },
+            {
+              key: "date",
+              label: "Detected At",
+              render: (row) => row.date || "-"
+            }
+          ]}
+          rows={filteredAnomalies.slice(0, 10)}
+        />
+      ) : (
+        <EmptyState text="No anomaly data available." />
+      )}
+    </SectionCard>
+  </div>
+
+  <div className="owner-top-grid">
+    <SectionCard title="Usage / Behavior Pattern Analysis">
+      {filteredPatterns.length ? (
+        <DataTable
+          columns={[
+            { key: "room_id", label: "Room" },
+            { key: "pattern_name", label: "Pattern" },
+            {
+              key: "date",
+              label: "Time",
+              render: (row) => row.date || "-"
+            }
+          ]}
+          rows={filteredPatterns.slice(0, 10)}
+        />
+      ) : (
+        <EmptyState text="No pattern analysis data available." />
+      )}
+    </SectionCard>
+
+    <SectionCard title="Correlation / Feature Importance">
+      {wardenFeatureImportance.length ? (
+        <DataTable
+          columns={[
+            { key: "feature", label: "Feature" },
+            {
+              key: "importance",
+              label: "Importance",
+              render: (row) => Number(row.importance || 0).toFixed(4)
+            }
+          ]}
+          rows={wardenFeatureImportance}
+        />
+      ) : (
+        <EmptyState text="No feature importance data available." />
+      )}
+    </SectionCard>
+  </div>
+</SectionCard>
       {selectedKpi ? (
         <div className="warden-modal-overlay" onClick={() => setSelectedKpi(null)}>
           <div className="warden-modal" onClick={(e) => e.stopPropagation()}>
