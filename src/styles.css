@@ -221,6 +221,17 @@ body {
   position: relative;
   padding: 2px;
 }
+.badge-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .owner-dashboard .filter-bar,
 .owner-dashboard .stat-card,
