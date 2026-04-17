@@ -343,6 +343,10 @@ export default function WardenDashboard() {
       setRooms(latestRooms);
       setInspectionQueue(latestInspection);
       setNoiseTrend(latestNoiseTrend);
+      setWardenForecasts(forecastRes.items || []);
+      setWardenAnomalies(anomalyRes.items || []);
+      setWardenPatterns(patternRes.items || []);
+      setWardenFeatureImportance(featureImportanceRes.items || []);
 
       const currentRoomFilter = selectedRoomFilterRef.current;
       const scopedInspection =
