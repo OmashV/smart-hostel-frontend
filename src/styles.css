@@ -806,8 +806,10 @@ body {
     flex-direction: column;
     flex-wrap: nowrap;
   }
-  
+  /* ==================== WARDEN DASHBOARD SPECIFIC CSS ONLY ==================== */
+
 }
+/* ==================== WARDEN DASHBOARD SPECIFIC CSS ==================== */
 
 .warden-filter-bar {
   background: #ffffff;
@@ -1019,4 +1021,25 @@ body {
     grid-template-columns: 1fr;
   }
 }
+.warden-modal {
+  max-height: 90vh;
+  overflow-y: auto;
+}
 
+.warden-alert-button {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.warden-kpi-button,
+.warden-kpi-button:focus,
+.warden-kpi-button:active {
+  box-shadow: none !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+}
+
+.warden-kpi-button .stat-card {
+  margin: 0;
+}
