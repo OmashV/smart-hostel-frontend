@@ -23,7 +23,11 @@ import {
   getWardenNoiseIssues,
   getWardenNoiseTrend,
   getWardenRoomsStatus,
-  getWardenSummary
+  getWardenSummary,
+  getWardenFeatureImportance,
+  getWardenAnomalies,
+  getWardenPatterns,
+  getWardenForecasts
 } from "../api/client";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
@@ -294,6 +298,11 @@ export default function WardenDashboard() {
   const [selectedKpi, setSelectedKpi] = useState(null);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [alertHistory, setAlertHistory] = useState([]);
+  const [wardenForecasts, setWardenForecasts] = useState([]);
+  const [wardenAnomalies, setWardenAnomalies] = useState([]);
+  const [wardenPatterns, setWardenPatterns] = useState([]);
+  const [wardenFeatureImportance, setWardenFeatureImportance] = useState([]);
+  
 
   const selectedRoomFilterRef = useRef(selectedRoomFilter);
   useEffect(() => {
@@ -304,14 +313,27 @@ export default function WardenDashboard() {
     try {
       setError("");
 
-      const [summaryRes, roomsRes, _noiseRes, inspectionRes, trendRes] =
-        await Promise.all([
-          getWardenSummary(),
-          getWardenRoomsStatus(),
-          getWardenNoiseIssues(),
-          getWardenInspectionQueue(),
-          getWardenNoiseTrend(7)
-        ]);
+      const [
+  summaryRes,
+  roomsRes,
+  _noiseRes,
+  inspectionRes,
+  trendRes,
+  forecastRes,
+  anomalyRes,
+  patternRes,
+  featureImportanceRes
+] = await Promise.all([
+  getWardenSummary(),
+  getWardenRoomsStatus(),
+  getWardenNoiseIssues(),
+  getWardenInspectionQueue(),
+  getWardenNoiseTrend(7),
+  getWardenForecasts(),
+  getWardenAnomalies(),
+  getWardenPatterns(),
+  getWardenFeatureImportance()
+]);
 
       const latestRooms = roomsRes.rooms || [];
       const latestInspection = inspectionRes.rooms || [];
