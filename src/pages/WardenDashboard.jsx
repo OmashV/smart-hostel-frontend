@@ -23,7 +23,11 @@ import {
   getWardenNoiseIssues,
   getWardenNoiseTrend,
   getWardenRoomsStatus,
-  getWardenSummary
+  getWardenSummary,
+  getWardenFeatureImportance,
+  getWardenAnomalies,
+  getWardenPatterns,
+  getWardenForecasts
 } from "../api/client";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
@@ -294,6 +298,11 @@ export default function WardenDashboard() {
   const [selectedKpi, setSelectedKpi] = useState(null);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [alertHistory, setAlertHistory] = useState([]);
+  const [wardenForecasts, setWardenForecasts] = useState([]);
+  const [wardenAnomalies, setWardenAnomalies] = useState([]);
+  const [wardenPatterns, setWardenPatterns] = useState([]);
+  const [wardenFeatureImportance, setWardenFeatureImportance] = useState([]);
+  
 
   const selectedRoomFilterRef = useRef(selectedRoomFilter);
   useEffect(() => {
@@ -304,14 +313,27 @@ export default function WardenDashboard() {
     try {
       setError("");
 
-      const [summaryRes, roomsRes, _noiseRes, inspectionRes, trendRes] =
-        await Promise.all([
-          getWardenSummary(),
-          getWardenRoomsStatus(),
-          getWardenNoiseIssues(),
-          getWardenInspectionQueue(),
-          getWardenNoiseTrend(7)
-        ]);
+      const [
+  summaryRes,
+  roomsRes,
+  _noiseRes,
+  inspectionRes,
+  trendRes,
+  forecastRes,
+  anomalyRes,
+  patternRes,
+  featureImportanceRes
+] = await Promise.all([
+  getWardenSummary(),
+  getWardenRoomsStatus(),
+  getWardenNoiseIssues(),
+  getWardenInspectionQueue(),
+  getWardenNoiseTrend(7),
+  getWardenForecasts(),
+  getWardenAnomalies(),
+  getWardenPatterns(),
+  getWardenFeatureImportance()
+]);
 
       const latestRooms = roomsRes.rooms || [];
       const latestInspection = inspectionRes.rooms || [];
@@ -321,6 +343,10 @@ export default function WardenDashboard() {
       setRooms(latestRooms);
       setInspectionQueue(latestInspection);
       setNoiseTrend(latestNoiseTrend);
+      setWardenForecasts(forecastRes.items || []);
+      setWardenAnomalies(anomalyRes.items || []);
+      setWardenPatterns(patternRes.items || []);
+      setWardenFeatureImportance(featureImportanceRes.items || []);
 
       const currentRoomFilter = selectedRoomFilterRef.current;
       const scopedInspection =
@@ -631,6 +657,21 @@ export default function WardenDashboard() {
       ? 1
       : 0;
 
+  const filteredForecasts = useMemo(() => {
+  if (selectedRoomFilter === "All") return wardenForecasts;
+  return wardenForecasts.filter((item) => item.room_id === selectedRoomFilter);
+}, [wardenForecasts, selectedRoomFilter]);
+
+const filteredAnomalies = useMemo(() => {
+  if (selectedRoomFilter === "All") return wardenAnomalies;
+  return wardenAnomalies.filter((item) => item.room_id === selectedRoomFilter);
+}, [wardenAnomalies, selectedRoomFilter]);
+
+const filteredPatterns = useMemo(() => {
+  if (selectedRoomFilter === "All") return wardenPatterns;
+  return wardenPatterns.filter((item) => item.room_id === selectedRoomFilter);
+}, [wardenPatterns, selectedRoomFilter]);
+
   if (loading) return <LoadingState />;
 
   return (
@@ -744,6 +785,37 @@ export default function WardenDashboard() {
         </KpiCardButton>
       </div>
 
+      {/* ===== ML INSIGHTS KPI ===== */}
+<div className="stats-grid">
+  <StatCard
+    title="Forecast Rows"
+    value={forecastCount}
+    subtitle="Temporal trend predictions"
+    icon={<HiOutlineSpeakerWave />}
+    tone="blue"
+  />
+  <StatCard
+    title="Detected Anomalies"
+    value={anomalyCount}
+    subtitle="ML anomaly detection"
+    icon={<HiOutlineExclamationTriangle />}
+    tone="red"
+  />
+  <StatCard
+    title="Pattern Rows"
+    value={patternCount}
+    subtitle="Behavior pattern analysis"
+    icon={<HiOutlineHomeModern />}
+    tone="green"
+  />
+  <StatCard
+    title="Top Feature"
+    value={topFeature}
+    subtitle="Most influential variable"
+    icon={<HiOutlineWrenchScrewdriver />}
+    tone="orange"
+  />
+</div>
       {selectedRoomFilter === "All" ? (
         <>
           <div className="owner-top-grid">
@@ -974,6 +1046,106 @@ export default function WardenDashboard() {
         )}
       </SectionCard>
 
+      <SectionCard title={`Data Analysis & Insights - ${selectedRoomFilter}`}>
+  <div className="owner-top-grid">
+    <SectionCard title="Temporal Trend Forecast">
+      {filteredForecasts.length ? (
+        <DataTable
+          columns={[
+            { key: "room_id", label: "Room" },
+            {
+              key: "date",
+              label: "Forecast Time",
+              render: (row) => row.date || "-"
+            },
+            {
+              key: "predicted_warning_count",
+              label: "Predicted Warnings",
+              render: (row) => Number(row.predicted_warning_count || 0).toFixed(2)
+            },
+            {
+              key: "predicted_violation_count",
+              label: "Predicted Violations",
+              render: (row) => Number(row.predicted_violation_count || 0).toFixed(2)
+            },
+            {
+              key: "predicted_occupied_count",
+              label: "Predicted Occupancy",
+              render: (row) => Number(row.predicted_occupied_count || 0).toFixed(2)
+            }
+          ]}
+          rows={filteredForecasts.slice(0, 10)}
+        />
+      ) : (
+        <EmptyState text="No forecast data available." />
+      )}
+    </SectionCard>
+
+    <SectionCard title="Anomaly Detection">
+      {filteredAnomalies.length ? (
+        <DataTable
+          columns={[
+            { key: "room_id", label: "Room" },
+            { key: "status", label: "Status" },
+            { key: "reason", label: "Reason" },
+            {
+              key: "anomaly_score",
+              label: "Anomaly Score",
+              render: (row) => Number(row.anomaly_score || 0).toFixed(4)
+            },
+            {
+              key: "date",
+              label: "Detected At",
+              render: (row) => row.date || "-"
+            }
+          ]}
+          rows={filteredAnomalies.slice(0, 10)}
+        />
+      ) : (
+        <EmptyState text="No anomaly data available." />
+      )}
+    </SectionCard>
+  </div>
+
+  <div className="owner-top-grid">
+    <SectionCard title="Usage / Behavior Pattern Analysis">
+      {filteredPatterns.length ? (
+        <DataTable
+          columns={[
+            { key: "room_id", label: "Room" },
+            { key: "pattern_name", label: "Pattern" },
+            {
+              key: "date",
+              label: "Time",
+              render: (row) => row.date || "-"
+            }
+          ]}
+          rows={filteredPatterns.slice(0, 10)}
+        />
+      ) : (
+        <EmptyState text="No pattern analysis data available." />
+      )}
+    </SectionCard>
+
+    <SectionCard title="Correlation / Feature Importance">
+      {wardenFeatureImportance.length ? (
+        <DataTable
+          columns={[
+            { key: "feature", label: "Feature" },
+            {
+              key: "importance",
+              label: "Importance",
+              render: (row) => Number(row.importance || 0).toFixed(4)
+            }
+          ]}
+          rows={wardenFeatureImportance}
+        />
+      ) : (
+        <EmptyState text="No feature importance data available." />
+      )}
+    </SectionCard>
+  </div>
+</SectionCard>
       {selectedKpi ? (
         <div className="warden-modal-overlay" onClick={() => setSelectedKpi(null)}>
           <div className="warden-modal" onClick={(e) => e.stopPropagation()}>
