@@ -785,6 +785,37 @@ const filteredPatterns = useMemo(() => {
         </KpiCardButton>
       </div>
 
+      {/* ===== ML INSIGHTS KPI ===== */}
+<div className="stats-grid">
+  <StatCard
+    title="Forecast Rows"
+    value={forecastCount}
+    subtitle="Temporal trend predictions"
+    icon={<HiOutlineSpeakerWave />}
+    tone="blue"
+  />
+  <StatCard
+    title="Detected Anomalies"
+    value={anomalyCount}
+    subtitle="ML anomaly detection"
+    icon={<HiOutlineExclamationTriangle />}
+    tone="red"
+  />
+  <StatCard
+    title="Pattern Rows"
+    value={patternCount}
+    subtitle="Behavior pattern analysis"
+    icon={<HiOutlineHomeModern />}
+    tone="green"
+  />
+  <StatCard
+    title="Top Feature"
+    value={topFeature}
+    subtitle="Most influential variable"
+    icon={<HiOutlineWrenchScrewdriver />}
+    tone="orange"
+  />
+</div>
       {selectedRoomFilter === "All" ? (
         <>
           <div className="owner-top-grid">
