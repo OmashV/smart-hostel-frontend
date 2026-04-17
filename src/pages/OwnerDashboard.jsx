@@ -22,6 +22,8 @@ import {
   getEnergyForecast,
   getEnergyHistory,
   getOwnerAlerts,
+  resolveOwnerAlert,
+  deleteOwnerAlert,
   getOwnerAnomalies,
   getOwnerKpis,
   getOwnerPatterns,
@@ -35,7 +37,7 @@ import SectionCard from "../components/SectionCard";
 import LoadingState from "../components/LoadingState";
 import StatusBadge from "../components/StatusBadge";
 
-function AlertCard({ alert }) {
+function AlertCard({ alert, onResolve, onDelete }) {
   const cls =
     alert.severity === "Critical"
       ? "alert-card critical"
@@ -49,6 +51,8 @@ function AlertCard({ alert }) {
     ) : (
       <HiOutlineInformationCircle />
     );
+
+  const displayDate = alert.captured_at || alert.date;
 
   return (
     <div className={cls}>
@@ -64,7 +68,24 @@ function AlertCard({ alert }) {
 
       <div className="alert-meta">
         <span>{alert.room_id}</span>
-        <span>{formatDate(alert.captured_at)}</span>
+        <span>{formatDate(displayDate)}</span>
+      </div>
+
+      <div className="alert-actions">
+        <button
+          type="button"
+          className="alert-action-btn resolve"
+          onClick={() => onResolve(alert._id)}
+        >
+          Resolve
+        </button>
+        <button
+          type="button"
+          className="alert-action-btn delete"
+          onClick={() => onDelete(alert._id)}
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
@@ -164,12 +185,15 @@ export default function OwnerDashboard() {
       try {
         const [overviewRes, alertsRes] = await Promise.all([
           getOwnerRoomsOverview(),
-          getOwnerAlerts()
+          getOwnerAlerts().catch(() => ({ alerts: [] }))
         ]);
-
+    
         const rooms = overviewRes.rooms || [];
         const liveAlerts = alertsRes.alerts || [];
-
+    
+        setRoomsOverview(rooms);
+        setAlerts(liveAlerts);
+    
         const totalEnergy = rooms.reduce(
           (sum, r) => sum + Number(r.total_energy_kwh || 0),
           0
@@ -185,21 +209,13 @@ export default function OwnerDashboard() {
         const highWasteRooms = rooms.filter(
           (r) => r.waste_stat === "Critical"
         ).length;
-
-        setRoomsOverview(rooms);
-        setAlerts(liveAlerts);
+    
         setKpis({
           total_energy_today_kwh: totalEnergy,
           wasted_energy_today_kwh: wastedEnergy,
           waste_ratio_today_percent: wasteRatio,
           current_waste_status: `${highWasteRooms} High Waste Rooms`
         });
-
-        setHistory([]);
-        setForecast([]);
-        setAnomalies([]);
-        setPatterns([]);
-        setSelectedDay(null);
       } catch (error) {
         console.error("All rooms refresh failed:", error);
       } finally {
@@ -480,6 +496,54 @@ export default function OwnerDashboard() {
     return "Normal";
   }, [kpis, resolvedWasteRatio]);
 
+  const handleResolveAlert = async (alertId) => {
+    try {
+      await resolveOwnerAlert(alertId);
+      setAlerts((prev) => prev.filter((item) => item._id !== alertId));
+    } catch (error) {
+      console.error("Resolve alert failed:", error);
+    }
+  };
+  
+  const handleDeleteAlert = async (alertId) => {
+    try {
+      await deleteOwnerAlert(alertId);
+      setAlerts((prev) => prev.filter((item) => item._id !== alertId));
+    } catch (error) {
+      console.error("Delete alert failed:", error);
+    }
+  };
+
+  const patternSummary = useMemo(() => {
+    if (!patterns.length) {
+      return {
+        latestPattern: "-",
+        mostCommonPattern: "-",
+        highWasteDays: 0,
+        efficientDays: 0
+      };
+    }
+  
+    const sorted = [...patterns].sort((a, b) => b.date.localeCompare(a.date));
+    const latestPattern = sorted[0]?.pattern_name || "-";
+  
+    const counts = patterns.reduce((acc, item) => {
+      const key = item.pattern_name || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  
+    const mostCommonPattern =
+      Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+  
+    return {
+      latestPattern,
+      mostCommonPattern,
+      highWasteDays: counts["High Waste Pattern"] || 0,
+      efficientDays: counts["Efficient Usage"] || 0
+    };
+  }, [patterns]);
+
   if (loading) return <LoadingState />;
 
   return (
@@ -535,13 +599,18 @@ export default function OwnerDashboard() {
 
           <SectionCard title="Active Alerts">
             <div className="alerts-list">
-              {alerts.length ? (
-                alerts.map((alert, idx) => (
-                  <AlertCard key={idx} alert={alert} />
-                ))
-              ) : (
-                <p>No active owner-level alerts right now.</p>
-              )}
+            {alerts.length ? (
+              alerts.map((alert) => (
+                <AlertCard
+                  key={alert._id}
+                  alert={alert}
+                  onResolve={handleResolveAlert}
+                  onDelete={handleDeleteAlert}
+                />
+              ))
+            ) : (
+              <p>No active owner-level alerts right now.</p>
+            )}
             </div>
           </SectionCard>
         </div>
@@ -665,33 +734,73 @@ export default function OwnerDashboard() {
             )}
           </SectionCard>
 
-          <SectionCard title="Usage Pattern Summary">
+          <SectionCard title="Usage Pattern Insight">
             {patterns.length ? (
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Room</th>
-                      <th>Date</th>
-                      <th>Pattern</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {patterns.map((item, idx) => (
-                      <tr key={idx}>
-                        <td>{item.room_id}</td>
-                        <td>{item.date}</td>
-                        <td>{item.pattern_name}</td>
+              <>
+                <div className="stats-grid pattern-summary-grid">
+                  <StatCard
+                    title="Latest Pattern"
+                    value={patternSummary.latestPattern}
+                    subtitle="Most recent classified behavior"
+                    tone="green"
+                  />
+                  <StatCard
+                    title="Most Common Pattern"
+                    value={patternSummary.mostCommonPattern}
+                    subtitle="Most repeated historical behavior"
+                    tone="purple"
+                  />
+                  <StatCard
+                    title="High Waste Days"
+                    value={patternSummary.highWasteDays}
+                    subtitle="Days classified as high waste"
+                    tone="red"
+                  />
+                  <StatCard
+                    title="Efficient Days"
+                    value={patternSummary.efficientDays}
+                    subtitle="Days classified as efficient"
+                    tone="orange"
+                  />
+                </div>
+
+                <div className="table-wrap" style={{ marginTop: "16px" }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Pattern</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {[...patterns]
+                        .sort((a, b) => b.date.localeCompare(a.date))
+                        .map((item, idx) => (
+                          <tr key={idx}>
+                            <td>{item.date}</td>
+                            <td>
+                              <span
+                                className={
+                                  item.pattern_name === "Efficient Usage"
+                                    ? "badge ok"
+                                    : item.pattern_name === "Moderate Waste"
+                                    ? "badge warning"
+                                    : "badge danger"
+                                }
+                              >
+                                {item.pattern_name}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <p>No usage pattern summary available yet.</p>
             )}
           </SectionCard>
-
           <SectionCard title="Monthly Waste Calendar">
             <div className="owner-calendar-wrap">
               <div className="owner-calendar-toolbar">

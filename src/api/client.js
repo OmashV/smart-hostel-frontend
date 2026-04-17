@@ -19,8 +19,28 @@ export async function getOwnerRoomComparison() {
   return data;
 }
 
-export async function getOwnerAlerts() {
-  const { data } = await api.get(`/rooms/owner/alerts`);
+export async function getOwnerAlerts(roomId) {
+  const { data } = await api.get("/rooms/owner/alerts", {
+    params: roomId ? { roomId } : {}
+  });
+  return data;
+}
+
+export async function resolveOwnerAlert(alertId) {
+  const { data } = await api.patch(`/rooms/owner/alerts/${alertId}/resolve`);
+  return data;
+}
+
+export async function deleteOwnerAlert(alertId) {
+  const { data } = await api.delete(`/rooms/owner/alerts/${alertId}`);
+  return data;
+}
+
+
+export async function getOwnerAnomalies(roomId) {
+  const { data } = await api.get("/rooms/owner/anomalies", {
+    params: roomId ? { roomId } : {}
+  });
   return data;
 }
 
@@ -29,12 +49,7 @@ export async function getOwnerFeatureImportance() {
   return data;
 }
 
-export async function getOwnerAnomalies(roomId) {
-  const { data } = await api.get("/rooms/owner/anomalies", {
-    params: roomId ? { roomId } : {}
-  });
-  return data;
-}
+
 
 export async function getOwnerPatterns() {
   const { data } = await api.get(`/rooms/owner/patterns`);

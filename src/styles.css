@@ -217,6 +217,29 @@ body {
 }
 
 /* Owner specific wrapper */
+.alert-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.alert-action-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.alert-action-btn.resolve {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.alert-action-btn.delete {
+  background: #fee2e2;
+  color: #991b1b;
+}
 .owner-dashboard {
   position: relative;
   padding: 2px;
