@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Area,
-  Brush,
   CartesianGrid,
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -137,33 +136,6 @@ function OwnerRoomTile({ room }) {
   );
 }
 
-function BrushCircleHandle({ x, y, width, height }) {
-  const radius = 5;
-  const cx = x + width / 2;
-  const cy = y + height / 2;
-
-  return (
-    <g>
-      <line
-        x1={cx}
-        y1={y + 4}
-        x2={cx}
-        y2={y + height - 4}
-        stroke="#94a3b8"
-        strokeWidth={1.2}
-      />
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill="#ffffff"
-        stroke="#64748b"
-        strokeWidth={1.4}
-      />
-    </g>
-  );
-}
-
 export default function OwnerDashboard() {
   const [roomId, setRoomId] = useState("all");
   const [forecastDays, setForecastDays] = useState(5);
@@ -260,7 +232,7 @@ export default function OwnerDashboard() {
             history: [],
             forecast: []
           })),
-          getOwnerAnomalies().catch(() => ({ items: [] })),
+          getOwnerAnomalies(roomId).catch(() => ({ items: [] })),
           getOwnerPatterns().catch(() => ({ items: [] }))
         ]);
 
@@ -317,6 +289,10 @@ export default function OwnerDashboard() {
     () => mergeHistoryWithForecast(history, forecast),
     [history, forecast]
   );
+  const forecastSplitDate = useMemo(() => {
+    if (!history.length || !forecast.length) return null;
+    return history[history.length - 1]?.date || null;
+  }, [history, forecast]);
 
   const patternByDate = useMemo(() => {
     return patterns.reduce((acc, item) => {
@@ -443,34 +419,43 @@ export default function OwnerDashboard() {
     year: "numeric"
   });
 
-  const handleHistoryPointSelect = (entry) => {
-    const payload = entry?.activePayload?.[0]?.payload || entry?.payload;
-    if (!payload) {
-      setSelectedDay(null);
-      return;
-    }
-
-    setSelectedDay({
-      ...payload,
-      date:
-        typeof payload.date === "string"
-          ? payload.date.slice(0, 10)
-          : payload.date
-    });
-  };
-
   const handleCalendarDayClick = (day) => {
     if (day.data) setSelectedDay(day.data);
   };
 
-  const forecastLegendFormatter = (value) => {
-    const isPredicted = value.toLowerCase().includes("predicted");
-    return (
-      <span className={`legend-label ${isPredicted ? "predicted" : "actual"}`}>
-        {value}
-      </span>
-    );
-  };
+  const renderForecastLegend = ({ payload = [] }) => (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 14,
+        flexWrap: "wrap"
+      }}
+    >
+      {payload.map((entry) => (
+        <span
+          key={entry.value}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            color: entry.color,
+            fontSize: 13,
+            fontWeight: 600
+          }}
+        >
+          <i
+            style={{
+              width: 18,
+              borderTop: `2px ${String(entry.value).includes("Predicted") ? "dashed" : "solid"} ${entry.color}`
+            }}
+          />
+          {entry.value}
+        </span>
+      ))}
+    </div>
+  );
 
   const resolvedWasteRatio = useMemo(() => {
     if (kpis?.waste_ratio_today_percent !== undefined && kpis?.waste_ratio_today_percent !== null) {
@@ -562,10 +547,10 @@ export default function OwnerDashboard() {
         </div>
       ) : (
         <>
-          <SectionCard title="Energy Usage and Waste History">
+          <SectionCard title="Forecast: Actual vs Predicted">
             <ResponsiveContainer width="100%" height={360}>
-              <ComposedChart data={history} onClick={handleHistoryPointSelect}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
                 <XAxis
                   dataKey="date"
                   tick={{ fill: "#64748b", fontSize: 12 }}
@@ -586,87 +571,62 @@ export default function OwnerDashboard() {
                     boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
                   }}
                 />
-                <Legend />
+                {forecastSplitDate ? (
+                  <ReferenceLine
+                    x={forecastSplitDate}
+                    stroke="#94a3b8"
+                    strokeDasharray="4 4"
+                    ifOverflow="visible"
+                    label={{
+                      value: "forecast",
+                      position: "insideTopLeft",
+                      fill: "#0f172a",
+                      fontSize: 13
+                    }}
+                  />
+                ) : null}
+                <Legend content={renderForecastLegend} />
                 <Line
-                  type="monotone"
-                  dataKey="total_energy_kwh"
-                  name="Total Energy"
-                  stroke="#2563eb"
-                  strokeWidth={2.6}
-                  dot={{ r: 3, fill: "#2563eb", strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="wasted_energy_kwh"
-                  name="Wasted Energy"
-                  stroke="#f59e0b"
-                  strokeWidth={2.2}
-                  dot={{ r: 3, fill: "#f59e0b", strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                />
-                <Brush
-                  dataKey="date"
-                  height={16}
-                  travellerWidth={12}
-                  stroke="#cbd5e1"
-                  fill="#ffffff"
-                  tick={{ fill: "#64748b", fontSize: 12 }}
-                  traveller={<BrushCircleHandle />}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </SectionCard>
-
-          <SectionCard title="Forecast: Actual vs Predicted">
-            <ResponsiveContainer width="100%" height={360}>
-              <ComposedChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
-                <XAxis dataKey="date" tick={{ fill: "#64748b" }} />
-                <YAxis tick={{ fill: "#64748b" }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "#ffffff",
-                    border: "1px solid #dbe2ea",
-                    borderRadius: "12px",
-                    color: "#172033",
-                    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
-                  }}
-                />
-                <Legend formatter={forecastLegendFormatter} />
-                <Area
                   type="monotone"
                   dataKey="total_energy_kwh"
                   name="Actual Energy"
-                  stroke="#3b82f6"
-                  fill="#93c5fd"
-                  fillOpacity={0.28}
+                  stroke="#2563eb"
+                  strokeWidth={2.6}
+                  dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
-                <Area
+                <Line
                   type="monotone"
                   dataKey="wasted_energy_kwh"
                   name="Actual Waste"
                   stroke="#f59e0b"
-                  fill="#fcd34d"
-                  fillOpacity={0.26}
+                  strokeWidth={2.2}
+                  dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
                 <Line
                   type="monotone"
                   dataKey="predicted_total_energy_kwh"
                   name="Predicted Energy"
-                  stroke="#6366f1"
-                  strokeWidth={2}
+                  stroke="#2563eb"
+                  strokeWidth={2.6}
                   strokeDasharray="10 6"
                   dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
                 <Line
                   type="monotone"
                   dataKey="predicted_wasted_energy_kwh"
                   name="Predicted Waste"
-                  stroke="#8b5cf6"
-                  strokeWidth={2}
-                  strokeDasharray="2 7"
+                  stroke="#f59e0b"
+                  strokeWidth={2.2}
+                  strokeDasharray="10 6"
                   dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
               </ComposedChart>
             </ResponsiveContainer>

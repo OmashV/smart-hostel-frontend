@@ -29,8 +29,10 @@ export async function getOwnerFeatureImportance() {
   return data;
 }
 
-export async function getOwnerAnomalies() {
-  const { data } = await api.get(`/rooms/owner/anomalies`);
+export async function getOwnerAnomalies(roomId) {
+  const { data } = await api.get("/rooms/owner/anomalies", {
+    params: roomId ? { roomId } : {}
+  });
   return data;
 }
 
