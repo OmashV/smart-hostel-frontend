@@ -22,7 +22,10 @@ import {
   getEnergyForecast,
   getEnergyHistory,
   getOwnerAlerts,
+  resolveOwnerAlert,
+  deleteOwnerAlert,
   getOwnerAnomalies,
+  getOwnerWeekdayPatterns,
   getOwnerKpis,
   getOwnerPatterns,
   getOwnerRoomsOverview
@@ -35,7 +38,7 @@ import SectionCard from "../components/SectionCard";
 import LoadingState from "../components/LoadingState";
 import StatusBadge from "../components/StatusBadge";
 
-function AlertCard({ alert }) {
+function AlertCard({ alert, onResolve, onDelete }) {
   const cls =
     alert.severity === "Critical"
       ? "alert-card critical"
@@ -49,6 +52,8 @@ function AlertCard({ alert }) {
     ) : (
       <HiOutlineInformationCircle />
     );
+
+  const displayDate = alert.captured_at || alert.date;
 
   return (
     <div className={cls}>
@@ -64,7 +69,24 @@ function AlertCard({ alert }) {
 
       <div className="alert-meta">
         <span>{alert.room_id}</span>
-        <span>{formatDate(alert.captured_at)}</span>
+        <span>{formatDate(displayDate)}</span>
+      </div>
+
+      <div className="alert-actions">
+        <button
+          type="button"
+          className="alert-action-btn resolve"
+          onClick={() => onResolve(alert._id)}
+        >
+          Resolve
+        </button>
+        <button
+          type="button"
+          className="alert-action-btn delete"
+          onClick={() => onDelete(alert._id)}
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
@@ -137,8 +159,21 @@ function OwnerRoomTile({ room }) {
 }
 
 export default function OwnerDashboard() {
-  const [roomId, setRoomId] = useState("all");
-  const [forecastDays, setForecastDays] = useState(5);
+  const [roomId, setRoomId] = useState(() => {
+    try {
+      return localStorage.getItem("smart-hostel.owner.roomId") || "all";
+    } catch {
+      return "all";
+    }
+  });
+  const [forecastDays, setForecastDays] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem("smart-hostel.owner.forecastDays"));
+      return raw === 7 ? 7 : 5;
+    } catch {
+      return 5;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   const [kpis, setKpis] = useState(null);
@@ -149,12 +184,29 @@ export default function OwnerDashboard() {
   const [forecast, setForecast] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
   const [patterns, setPatterns] = useState([]);
+  const [weekdayPatterns, setWeekdayPatterns] = useState([]);
 
   const [selectedDay, setSelectedDay] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("smart-hostel.owner.roomId", roomId);
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("smart-hostel.owner.forecastDays", String(forecastDays));
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [forecastDays]);
 
   useEffect(() => {
     let liveInterval;
@@ -164,12 +216,15 @@ export default function OwnerDashboard() {
       try {
         const [overviewRes, alertsRes] = await Promise.all([
           getOwnerRoomsOverview(),
-          getOwnerAlerts()
+          getOwnerAlerts().catch(() => ({ alerts: [] }))
         ]);
-
+    
         const rooms = overviewRes.rooms || [];
         const liveAlerts = alertsRes.alerts || [];
-
+    
+        setRoomsOverview(rooms);
+        setAlerts(liveAlerts);
+    
         const totalEnergy = rooms.reduce(
           (sum, r) => sum + Number(r.total_energy_kwh || 0),
           0
@@ -185,21 +240,13 @@ export default function OwnerDashboard() {
         const highWasteRooms = rooms.filter(
           (r) => r.waste_stat === "Critical"
         ).length;
-
-        setRoomsOverview(rooms);
-        setAlerts(liveAlerts);
+    
         setKpis({
           total_energy_today_kwh: totalEnergy,
           wasted_energy_today_kwh: wastedEnergy,
           waste_ratio_today_percent: wasteRatio,
           current_waste_status: `${highWasteRooms} High Waste Rooms`
         });
-
-        setHistory([]);
-        setForecast([]);
-        setAnomalies([]);
-        setPatterns([]);
-        setSelectedDay(null);
       } catch (error) {
         console.error("All rooms refresh failed:", error);
       } finally {
@@ -227,18 +274,20 @@ export default function OwnerDashboard() {
 
     async function loadSingleRoomAnalytics() {
       try {
-        const [forecastRes, anomalyRes, patternRes] = await Promise.all([
+        const [forecastRes, anomalyRes, patternRes, weekdayRes] = await Promise.all([
           getEnergyForecast(roomId, forecastDays).catch(() => ({
             history: [],
             forecast: []
           })),
           getOwnerAnomalies(roomId).catch(() => ({ items: [] })),
-          getOwnerPatterns().catch(() => ({ items: [] }))
+          getOwnerPatterns().catch(() => ({ items: [] })),
+          getOwnerWeekdayPatterns(roomId).catch(() => ({ items: [] }))
         ]);
-
+    
         setForecast(forecastRes.forecast || []);
         setAnomalies(anomalyRes.items || []);
         setPatterns(patternRes.items || []);
+        setWeekdayPatterns(weekdayRes.items || []);
       } catch (error) {
         console.error("Single room analytics refresh failed:", error);
       }
@@ -480,6 +529,54 @@ export default function OwnerDashboard() {
     return "Normal";
   }, [kpis, resolvedWasteRatio]);
 
+  const handleResolveAlert = async (alertId) => {
+    try {
+      await resolveOwnerAlert(alertId);
+      setAlerts((prev) => prev.filter((item) => item._id !== alertId));
+    } catch (error) {
+      console.error("Resolve alert failed:", error);
+    }
+  };
+  
+  const handleDeleteAlert = async (alertId) => {
+    try {
+      await deleteOwnerAlert(alertId);
+      setAlerts((prev) => prev.filter((item) => item._id !== alertId));
+    } catch (error) {
+      console.error("Delete alert failed:", error);
+    }
+  };
+
+  const patternSummary = useMemo(() => {
+    if (!patterns.length) {
+      return {
+        latestPattern: "-",
+        mostCommonPattern: "-",
+        highWasteDays: 0,
+        efficientDays: 0
+      };
+    }
+  
+    const sorted = [...patterns].sort((a, b) => b.date.localeCompare(a.date));
+    const latestPattern = sorted[0]?.pattern_name || "-";
+  
+    const counts = patterns.reduce((acc, item) => {
+      const key = item.pattern_name || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  
+    const mostCommonPattern =
+      Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+  
+    return {
+      latestPattern,
+      mostCommonPattern,
+      highWasteDays: counts["High Waste Pattern"] || 0,
+      efficientDays: counts["Efficient Usage"] || 0
+    };
+  }, [patterns]);
+
   if (loading) return <LoadingState />;
 
   return (
@@ -535,19 +632,24 @@ export default function OwnerDashboard() {
 
           <SectionCard title="Active Alerts">
             <div className="alerts-list">
-              {alerts.length ? (
-                alerts.map((alert, idx) => (
-                  <AlertCard key={idx} alert={alert} />
-                ))
-              ) : (
-                <p>No active owner-level alerts right now.</p>
-              )}
+            {alerts.length ? (
+              alerts.map((alert) => (
+                <AlertCard
+                  key={alert._id}
+                  alert={alert}
+                  onResolve={handleResolveAlert}
+                  onDelete={handleDeleteAlert}
+                />
+              ))
+            ) : (
+              <p>No active owner-level alerts right now.</p>
+            )}
             </div>
           </SectionCard>
         </div>
       ) : (
         <>
-          <SectionCard title="Forecast: Actual vs Predicted">
+          <SectionCard title="Historical and Forecasted Energy Trend">
             <ResponsiveContainer width="100%" height={360}>
               <ComposedChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
@@ -665,33 +767,50 @@ export default function OwnerDashboard() {
             )}
           </SectionCard>
 
-          <SectionCard title="Usage Pattern Summary">
-            {patterns.length ? (
+          <SectionCard title="Weekly Pattern Discovery">
+            {weekdayPatterns.length ? (
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Room</th>
-                      <th>Date</th>
-                      <th>Pattern</th>
+                      <th>Day</th>
+                      <th>Type</th>
+                      <th>Usual Pattern</th>
+                      <th>Avg Energy (kWh)</th>
+                      <th>Avg Waste (kWh)</th>
+                      <th>Avg Waste Ratio</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {patterns.map((item, idx) => (
+                    {weekdayPatterns.map((item, idx) => (
                       <tr key={idx}>
-                        <td>{item.room_id}</td>
-                        <td>{item.date}</td>
-                        <td>{item.pattern_name}</td>
+                        <td>{item.weekday_name}</td>
+                        <td>{item.day_type}</td>
+                        <td>
+                          <span
+                            className={
+                              item.usual_pattern === "Efficient Usage"
+                                ? "badge ok"
+                                : item.usual_pattern === "Moderate Waste"
+                                ? "badge warning"
+                                : "badge danger"
+                            }
+                          >
+                            {item.usual_pattern}
+                          </span>
+                        </td>
+                        <td>{Number(item.avg_total_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{Number(item.avg_wasted_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{Number(item.avg_waste_ratio_percent || 0).toFixed(2)}%</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <p>No usage pattern summary available yet.</p>
+              <p>No weekday pattern discovery available yet.</p>
             )}
           </SectionCard>
-
           <SectionCard title="Monthly Waste Calendar">
             <div className="owner-calendar-wrap">
               <div className="owner-calendar-toolbar">
@@ -762,23 +881,24 @@ export default function OwnerDashboard() {
 
               <div className="selected-day">
                 {selectedDayData ? (
-                  <>
-                    <p>
-                      <strong>Date:</strong> {selectedDayData.date}
-                    </p>
-                    <p>
-                      <strong>Total Energy:</strong>{" "}
-                      {formatKwh(selectedDayData.total_energy_kwh)}
-                    </p>
-                    <p>
-                      <strong>Wasted Energy:</strong>{" "}
-                      {formatKwh(selectedDayData.wasted_energy_kwh)}
-                    </p>
-                    <p>
-                      <strong>Waste Ratio:</strong>{" "}
-                      {Number(selectedDayData.waste_ratio_percent || 0).toFixed(2)}%
-                    </p>
-                  </>
+                  <div className="selected-day-row">
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Date</span>
+                      <strong>{selectedDayData.date}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Total Energy</span>
+                      <strong>{formatKwh(selectedDayData.total_energy_kwh)}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Wasted Energy</span>
+                      <strong>{formatKwh(selectedDayData.wasted_energy_kwh)}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Waste Ratio</span>
+                      <strong>{Number(selectedDayData.waste_ratio_percent || 0).toFixed(2)}%</strong>
+                    </div>
+                  </div>
                 ) : (
                   <p>Click a colored date to view energy and waste details.</p>
                 )}

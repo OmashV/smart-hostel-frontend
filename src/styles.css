@@ -68,7 +68,10 @@ body {
   background: #0f172a;
   color: white;
   padding: 24px 18px;
-  position: relative;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: start;
   z-index: 20;
   transition: width 0.25s ease, transform 0.25s ease, padding 0.25s ease;
   overflow: hidden;
@@ -217,6 +220,29 @@ body {
 }
 
 /* Owner specific wrapper */
+.alert-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.alert-action-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.alert-action-btn.resolve {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.alert-action-btn.delete {
+  background: #fee2e2;
+  color: #991b1b;
+}
 .owner-dashboard {
   position: relative;
   padding: 2px;
@@ -663,6 +689,32 @@ body {
   padding: 7px 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.selected-day {
+  margin-top: 16px;
+}
+
+.selected-day-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.selected-day-item {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selected-day-label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .calendar-nav-btn:hover {
