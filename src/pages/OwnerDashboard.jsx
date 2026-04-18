@@ -25,6 +25,7 @@ import {
   resolveOwnerAlert,
   deleteOwnerAlert,
   getOwnerAnomalies,
+  getOwnerWeekdayPatterns,
   getOwnerKpis,
   getOwnerPatterns,
   getOwnerRoomsOverview
@@ -158,8 +159,21 @@ function OwnerRoomTile({ room }) {
 }
 
 export default function OwnerDashboard() {
-  const [roomId, setRoomId] = useState("all");
-  const [forecastDays, setForecastDays] = useState(5);
+  const [roomId, setRoomId] = useState(() => {
+    try {
+      return localStorage.getItem("smart-hostel.owner.roomId") || "all";
+    } catch {
+      return "all";
+    }
+  });
+  const [forecastDays, setForecastDays] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem("smart-hostel.owner.forecastDays"));
+      return raw === 7 ? 7 : 5;
+    } catch {
+      return 5;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   const [kpis, setKpis] = useState(null);
@@ -170,12 +184,29 @@ export default function OwnerDashboard() {
   const [forecast, setForecast] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
   const [patterns, setPatterns] = useState([]);
+  const [weekdayPatterns, setWeekdayPatterns] = useState([]);
 
   const [selectedDay, setSelectedDay] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("smart-hostel.owner.roomId", roomId);
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("smart-hostel.owner.forecastDays", String(forecastDays));
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [forecastDays]);
 
   useEffect(() => {
     let liveInterval;
@@ -243,18 +274,20 @@ export default function OwnerDashboard() {
 
     async function loadSingleRoomAnalytics() {
       try {
-        const [forecastRes, anomalyRes, patternRes] = await Promise.all([
+        const [forecastRes, anomalyRes, patternRes, weekdayRes] = await Promise.all([
           getEnergyForecast(roomId, forecastDays).catch(() => ({
             history: [],
             forecast: []
           })),
           getOwnerAnomalies(roomId).catch(() => ({ items: [] })),
-          getOwnerPatterns().catch(() => ({ items: [] }))
+          getOwnerPatterns().catch(() => ({ items: [] })),
+          getOwnerWeekdayPatterns(roomId).catch(() => ({ items: [] }))
         ]);
-
+    
         setForecast(forecastRes.forecast || []);
         setAnomalies(anomalyRes.items || []);
         setPatterns(patternRes.items || []);
+        setWeekdayPatterns(weekdayRes.items || []);
       } catch (error) {
         console.error("Single room analytics refresh failed:", error);
       }
@@ -616,7 +649,7 @@ export default function OwnerDashboard() {
         </div>
       ) : (
         <>
-          <SectionCard title="Forecast: Actual vs Predicted">
+          <SectionCard title="Historical and Forecasted Energy Trend">
             <ResponsiveContainer width="100%" height={360}>
               <ComposedChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
@@ -734,71 +767,48 @@ export default function OwnerDashboard() {
             )}
           </SectionCard>
 
-          <SectionCard title="Usage Pattern Insight">
-            {patterns.length ? (
-              <>
-                <div className="stats-grid pattern-summary-grid">
-                  <StatCard
-                    title="Latest Pattern"
-                    value={patternSummary.latestPattern}
-                    subtitle="Most recent classified behavior"
-                    tone="green"
-                  />
-                  <StatCard
-                    title="Most Common Pattern"
-                    value={patternSummary.mostCommonPattern}
-                    subtitle="Most repeated historical behavior"
-                    tone="purple"
-                  />
-                  <StatCard
-                    title="High Waste Days"
-                    value={patternSummary.highWasteDays}
-                    subtitle="Days classified as high waste"
-                    tone="red"
-                  />
-                  <StatCard
-                    title="Efficient Days"
-                    value={patternSummary.efficientDays}
-                    subtitle="Days classified as efficient"
-                    tone="orange"
-                  />
-                </div>
-
-                <div className="table-wrap" style={{ marginTop: "16px" }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Pattern</th>
+          <SectionCard title="Weekly Pattern Discovery">
+            {weekdayPatterns.length ? (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Day</th>
+                      <th>Type</th>
+                      <th>Usual Pattern</th>
+                      <th>Avg Energy (kWh)</th>
+                      <th>Avg Waste (kWh)</th>
+                      <th>Avg Waste Ratio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weekdayPatterns.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.weekday_name}</td>
+                        <td>{item.day_type}</td>
+                        <td>
+                          <span
+                            className={
+                              item.usual_pattern === "Efficient Usage"
+                                ? "badge ok"
+                                : item.usual_pattern === "Moderate Waste"
+                                ? "badge warning"
+                                : "badge danger"
+                            }
+                          >
+                            {item.usual_pattern}
+                          </span>
+                        </td>
+                        <td>{Number(item.avg_total_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{Number(item.avg_wasted_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{Number(item.avg_waste_ratio_percent || 0).toFixed(2)}%</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {[...patterns]
-                        .sort((a, b) => b.date.localeCompare(a.date))
-                        .map((item, idx) => (
-                          <tr key={idx}>
-                            <td>{item.date}</td>
-                            <td>
-                              <span
-                                className={
-                                  item.pattern_name === "Efficient Usage"
-                                    ? "badge ok"
-                                    : item.pattern_name === "Moderate Waste"
-                                    ? "badge warning"
-                                    : "badge danger"
-                                }
-                              >
-                                {item.pattern_name}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <p>No usage pattern summary available yet.</p>
+              <p>No weekday pattern discovery available yet.</p>
             )}
           </SectionCard>
           <SectionCard title="Monthly Waste Calendar">
@@ -871,23 +881,24 @@ export default function OwnerDashboard() {
 
               <div className="selected-day">
                 {selectedDayData ? (
-                  <>
-                    <p>
-                      <strong>Date:</strong> {selectedDayData.date}
-                    </p>
-                    <p>
-                      <strong>Total Energy:</strong>{" "}
-                      {formatKwh(selectedDayData.total_energy_kwh)}
-                    </p>
-                    <p>
-                      <strong>Wasted Energy:</strong>{" "}
-                      {formatKwh(selectedDayData.wasted_energy_kwh)}
-                    </p>
-                    <p>
-                      <strong>Waste Ratio:</strong>{" "}
-                      {Number(selectedDayData.waste_ratio_percent || 0).toFixed(2)}%
-                    </p>
-                  </>
+                  <div className="selected-day-row">
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Date</span>
+                      <strong>{selectedDayData.date}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Total Energy</span>
+                      <strong>{formatKwh(selectedDayData.total_energy_kwh)}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Wasted Energy</span>
+                      <strong>{formatKwh(selectedDayData.wasted_energy_kwh)}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Waste Ratio</span>
+                      <strong>{Number(selectedDayData.waste_ratio_percent || 0).toFixed(2)}%</strong>
+                    </div>
+                  </div>
                 ) : (
                   <p>Click a colored date to view energy and waste details.</p>
                 )}

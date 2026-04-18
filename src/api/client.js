@@ -19,6 +19,13 @@ export async function getOwnerRoomComparison() {
   return data;
 }
 
+export async function getOwnerWeekdayPatterns(roomId) {
+  const { data } = await api.get("/rooms/owner/weekday-patterns", {
+    params: roomId ? { roomId } : {}
+  });
+  return data;
+}
+
 export async function getOwnerAlerts(roomId) {
   const { data } = await api.get("/rooms/owner/alerts", {
     params: roomId ? { roomId } : {}
