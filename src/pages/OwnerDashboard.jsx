@@ -1,25 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
-import { HiOutlineExclamationTriangle, HiOutlineInformationCircle } from "react-icons/hi2";
-import { HiOutlineBolt, HiOutlineChartBarSquare, HiOutlineBuildingOffice2 } from "react-icons/hi2";
 import {
-  Area,
-  Brush,
   CartesianGrid,
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis
 } from "recharts";
 import {
+  HiOutlineBolt,
+  HiOutlineChartBarSquare,
+  HiOutlineBuildingOffice2,
+  HiOutlineExclamationTriangle,
+  HiOutlineInformationCircle
+} from "react-icons/hi2";
+
+import {
   getEnergyForecast,
   getEnergyHistory,
   getOwnerAlerts,
+  resolveOwnerAlert,
+  deleteOwnerAlert,
+  getOwnerAnomalies,
+  getOwnerWeekdayPatterns,
   getOwnerKpis,
-  getOwnerRoomsOverview,
-  getTopWasteDays
+  getOwnerPatterns,
+  getOwnerRoomsOverview
 } from "../api/client";
 import { mergeHistoryWithForecast } from "../utils/chart";
 import { formatDate, formatKwh } from "../utils/format";
@@ -29,7 +38,7 @@ import SectionCard from "../components/SectionCard";
 import LoadingState from "../components/LoadingState";
 import StatusBadge from "../components/StatusBadge";
 
-function AlertCard({ alert }) {
+function AlertCard({ alert, onResolve, onDelete }) {
   const cls =
     alert.severity === "Critical"
       ? "alert-card critical"
@@ -38,39 +47,63 @@ function AlertCard({ alert }) {
       : "alert-card info";
 
   const icon =
-    alert.severity === "Critical" ? (
-      <HiOutlineExclamationTriangle />
-    ) : alert.severity === "Warning" ? (
+    alert.severity === "Critical" || alert.severity === "Warning" ? (
       <HiOutlineExclamationTriangle />
     ) : (
       <HiOutlineInformationCircle />
     );
 
+  const displayDate = alert.captured_at || alert.date;
+
   return (
     <div className={cls}>
       <div className="alert-title-row">
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "18px" }}>{icon}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>{icon}</span>
           <strong>{alert.title}</strong>
         </div>
         <span className="alert-badge">{alert.severity}</span>
       </div>
+
       <p>{alert.message}</p>
+
       <div className="alert-meta">
         <span>{alert.room_id}</span>
-        <span>{formatDate(alert.captured_at)}</span>
+        <span>{formatDate(displayDate)}</span>
+      </div>
+
+      <div className="alert-actions">
+        <button
+          type="button"
+          className="alert-action-btn resolve"
+          onClick={() => onResolve(alert._id)}
+        >
+          Resolve
+        </button>
+        <button
+          type="button"
+          className="alert-action-btn delete"
+          onClick={() => onDelete(alert._id)}
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
 }
 
 function OwnerRoomTile({ room }) {
-  const tileClass =
-    room.waste_stat === "Critical"
-      ? "owner-room-tile critical"
-      : room.noise_stat === "Warning" || room.noise_stat === "Violation"
-      ? "owner-room-tile warning"
-      : "owner-room-tile normal";
+  const isCritical = room.waste_stat === "Critical";
+  const isWarning =
+    room.noise_stat === "Warning" || room.noise_stat === "Violation";
+
+  const tileClass = isCritical
+    ? "owner-room-tile critical"
+    : isWarning
+    ? "owner-room-tile warning"
+    : "owner-room-tile normal";
+
+  const dotClass = isCritical ? "red" : isWarning ? "orange" : "green";
 
   return (
     <div className={tileClass}>
@@ -79,15 +112,7 @@ function OwnerRoomTile({ room }) {
           <h3>{room.room_id}</h3>
           <p className="tile-subtext">Room overview</p>
         </div>
-        <span
-          className={`tile-dot ${
-            room.waste_stat === "Critical"
-              ? "red"
-              : room.noise_stat === "Warning" || room.noise_stat === "Violation"
-              ? "orange"
-              : "green"
-          }`}
-        />
+        <span className={`tile-dot ${dotClass}`} />
       </div>
 
       {room.alert_count > 0 && (
@@ -103,21 +128,27 @@ function OwnerRoomTile({ room }) {
         </div>
         <div className="tile-row">
           <span>Energy</span>
-          <strong>{room.total_energy_kwh.toFixed(2)} kWh</strong>
+          <strong>{Number(room.total_energy_kwh || 0).toFixed(2)} kWh</strong>
         </div>
         <div className="tile-row">
           <span>Waste</span>
-          <strong>{room.wasted_energy_kwh.toFixed(2)} kWh</strong>
+          <strong>{Number(room.wasted_energy_kwh || 0).toFixed(2)} kWh</strong>
         </div>
         <div className="tile-row">
           <span>Waste Ratio</span>
-          <strong>{room.waste_ratio_percent}%</strong>
+          <strong>{Number(room.waste_ratio_percent || 0).toFixed(2)}%</strong>
         </div>
       </div>
 
       <div className="tile-badges">
-        <StatusBadge value={room.noise_stat} />
-        <StatusBadge value={room.waste_stat} />
+        <span className="badge-label-wrap">
+          <small className="badge-label">Noise</small>
+          <StatusBadge value={room.noise_stat} />
+        </span>
+        <span className="badge-label-wrap">
+          <small className="badge-label">Waste</small>
+          <StatusBadge value={room.waste_stat} />
+        </span>
       </div>
 
       <div className="tile-footer">
@@ -127,37 +158,34 @@ function OwnerRoomTile({ room }) {
   );
 }
 
-function BrushCircleHandle({ x, y, width, height }) {
-  const radius = 5;
-  const cx = x + width / 2;
-  const cy = y + height / 2;
-
-  return (
-    <g>
-      <line
-        x1={cx}
-        y1={y + 4}
-        x2={cx}
-        y2={y + height - 4}
-        stroke="#94a3b8"
-        strokeWidth={1.2}
-      />
-      <circle cx={cx} cy={cy} r={radius} fill="#ffffff" stroke="#64748b" strokeWidth={1.4} />
-    </g>
-  );
-}
-
 export default function OwnerDashboard() {
-  const [roomId, setRoomId] = useState("all");
-  const [forecastDays, setForecastDays] = useState(5);
+  const [roomId, setRoomId] = useState(() => {
+    try {
+      return localStorage.getItem("smart-hostel.owner.roomId") || "all";
+    } catch {
+      return "all";
+    }
+  });
+  const [forecastDays, setForecastDays] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem("smart-hostel.owner.forecastDays"));
+      return raw === 7 ? 7 : 5;
+    } catch {
+      return 5;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   const [kpis, setKpis] = useState(null);
+  const [roomsOverview, setRoomsOverview] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+
   const [history, setHistory] = useState([]);
   const [forecast, setForecast] = useState([]);
-  const [topWasteDays, setTopWasteDays] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [roomsOverview, setRoomsOverview] = useState([]);
+  const [anomalies, setAnomalies] = useState([]);
+  const [patterns, setPatterns] = useState([]);
+  const [weekdayPatterns, setWeekdayPatterns] = useState([]);
+
   const [selectedDay, setSelectedDay] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const today = new Date();
@@ -165,102 +193,184 @@ export default function OwnerDashboard() {
   });
 
   useEffect(() => {
+    try {
+      localStorage.setItem("smart-hostel.owner.roomId", roomId);
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("smart-hostel.owner.forecastDays", String(forecastDays));
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [forecastDays]);
+
+  useEffect(() => {
+    let liveInterval;
+    let analyticsInterval;
+
     async function loadAllRoomsView() {
-      setLoading(true);
       try {
         const [overviewRes, alertsRes] = await Promise.all([
           getOwnerRoomsOverview(),
-          getOwnerAlerts()
+          getOwnerAlerts().catch(() => ({ alerts: [] }))
         ]);
-
+    
         const rooms = overviewRes.rooms || [];
+        const liveAlerts = alertsRes.alerts || [];
+    
         setRoomsOverview(rooms);
-        setAlerts(alertsRes.alerts || []);
-
-        const totalEnergy = rooms.reduce((sum, r) => sum + (r.total_energy_kwh || 0), 0);
-        const wastedEnergy = rooms.reduce((sum, r) => sum + (r.wasted_energy_kwh || 0), 0);
+        setAlerts(liveAlerts);
+    
+        const totalEnergy = rooms.reduce(
+          (sum, r) => sum + Number(r.total_energy_kwh || 0),
+          0
+        );
+        const wastedEnergy = rooms.reduce(
+          (sum, r) => sum + Number(r.wasted_energy_kwh || 0),
+          0
+        );
         const wasteRatio =
-          totalEnergy > 0 ? Number(((wastedEnergy / totalEnergy) * 100).toFixed(2)) : 0;
-        const highWasteRooms = rooms.filter((r) => r.waste_stat === "Critical").length;
-
+          totalEnergy > 0
+            ? Number(((wastedEnergy / totalEnergy) * 100).toFixed(2))
+            : 0;
+        const highWasteRooms = rooms.filter(
+          (r) => r.waste_stat === "Critical"
+        ).length;
+    
         setKpis({
           total_energy_today_kwh: totalEnergy,
           wasted_energy_today_kwh: wastedEnergy,
           waste_ratio_today_percent: wasteRatio,
           current_waste_status: `${highWasteRooms} High Waste Rooms`
         });
+      } catch (error) {
+        console.error("All rooms refresh failed:", error);
       } finally {
         setLoading(false);
       }
     }
 
-    async function loadSingleRoomView() {
-      setLoading(true);
+    async function loadSingleRoomLive() {
       try {
-        const [kpiRes, historyRes, forecastRes, topWasteRes] = await Promise.all([
+        const [kpiRes, historyRes] = await Promise.all([
           getOwnerKpis(roomId),
-          getEnergyHistory(roomId),
-          getEnergyForecast(roomId, forecastDays).catch(() => ({
-            history: [],
-            forecast: []
-          })),
-          getTopWasteDays(roomId, 31).catch(() => ({ days: [] }))
+          getEnergyHistory(roomId)
         ]);
 
         setKpis(kpiRes);
         setHistory(historyRes.history || []);
-        setForecast(forecastRes.forecast || []);
-        setTopWasteDays(topWasteRes.days || []);
+        setRoomsOverview([]);
+        setAlerts([]);
+      } catch (error) {
+        console.error("Single room live refresh failed:", error);
       } finally {
         setLoading(false);
       }
     }
 
+    async function loadSingleRoomAnalytics() {
+      try {
+        const [forecastRes, anomalyRes, patternRes, weekdayRes] = await Promise.all([
+          getEnergyForecast(roomId, forecastDays).catch(() => ({
+            history: [],
+            forecast: []
+          })),
+          getOwnerAnomalies(roomId).catch(() => ({ items: [] })),
+          getOwnerPatterns().catch(() => ({ items: [] })),
+          getOwnerWeekdayPatterns(roomId).catch(() => ({ items: [] }))
+        ]);
+    
+        setForecast(forecastRes.forecast || []);
+        setAnomalies(anomalyRes.items || []);
+        setPatterns(patternRes.items || []);
+        setWeekdayPatterns(weekdayRes.items || []);
+      } catch (error) {
+        console.error("Single room analytics refresh failed:", error);
+      }
+    }
+
+    setLoading(true);
+
     if (roomId === "all") {
       loadAllRoomsView();
+      liveInterval = setInterval(loadAllRoomsView, 10000);
     } else {
-      loadSingleRoomView();
+      loadSingleRoomLive();
+      loadSingleRoomAnalytics();
+
+      liveInterval = setInterval(loadSingleRoomLive, 10000);
+      analyticsInterval = setInterval(loadSingleRoomAnalytics, 60000);
     }
+
+    return () => {
+      if (liveInterval) clearInterval(liveInterval);
+      if (analyticsInterval) clearInterval(analyticsInterval);
+    };
   }, [roomId, forecastDays]);
+
   useEffect(() => {
-    if (!history.length) return;
+    if (roomId === "all" || !history.length) return;
+
     const latest = history[history.length - 1];
     const latestDate = new Date(latest.date);
+
     if (!Number.isNaN(latestDate.getTime())) {
-      setCalendarMonth(new Date(latestDate.getFullYear(), latestDate.getMonth(), 1));
+      setCalendarMonth(
+        new Date(latestDate.getFullYear(), latestDate.getMonth(), 1)
+      );
+
+      const key = `${latestDate.getFullYear()}-${String(
+        latestDate.getMonth() + 1
+      ).padStart(2, "0")}-${String(latestDate.getDate()).padStart(2, "0")}`;
+
+      setSelectedDay({
+        ...latest,
+        date: key
+      });
     }
-    const key = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, "0")}-${String(
-      latestDate.getDate()
-    ).padStart(2, "0")}`;
-    setSelectedDay({
-      ...latest,
-      date: key
-    });
-  }, [history]);
+  }, [history, roomId]);
 
   const chartData = useMemo(
     () => mergeHistoryWithForecast(history, forecast),
     [history, forecast]
   );
+  const forecastSplitDate = useMemo(() => {
+    if (!history.length || !forecast.length) return null;
+    return history[history.length - 1]?.date || null;
+  }, [history, forecast]);
+
+  const patternByDate = useMemo(() => {
+    return patterns.reduce((acc, item) => {
+      if (item?.date) {
+        acc[item.date] = item.pattern_name;
+      }
+      return acc;
+    }, {});
+  }, [patterns]);
+
   const historyByDate = useMemo(() => {
     const toDateKey = (rawDate) => {
       if (!rawDate) return "";
-      if (typeof rawDate === "string" && rawDate.length >= 10) return rawDate.slice(0, 10);
+      if (typeof rawDate === "string" && rawDate.length >= 10) {
+        return rawDate.slice(0, 10);
+      }
+
       const parsed = new Date(rawDate);
       if (Number.isNaN(parsed.getTime())) return "";
+
       const y = parsed.getFullYear();
       const m = String(parsed.getMonth() + 1).padStart(2, "0");
       const d = String(parsed.getDate()).padStart(2, "0");
       return `${y}-${m}-${d}`;
     };
 
-    const topWasteByDate = (topWasteDays || []).reduce((acc, item) => {
-      const key = toDateKey(item.date);
-      if (!key) return acc;
-      acc[key] = item;
-      return acc;
-    }, {});
-    const latestHistoryDateKey = history.length ? toDateKey(history[history.length - 1]?.date) : "";
+    const latestHistoryDateKey =
+      history.length > 0 ? toDateKey(history[history.length - 1]?.date) : "";
+
     const currentKpiStatus = String(kpis?.current_waste_status || "").toLowerCase();
     const kpiStatusNormalized =
       currentKpiStatus.includes("critical")
@@ -274,66 +384,71 @@ export default function OwnerDashboard() {
     return history.reduce((acc, item) => {
       const key = toDateKey(item.date);
       if (!key) return acc;
-      const topWasteItem = topWasteByDate[key];
+
       const total = Number(item.total_energy_kwh || 0);
       const waste = Number(item.wasted_energy_kwh || 0);
-      const backendRatioRaw =
-        item.waste_ratio_percent !== undefined && item.waste_ratio_percent !== null
-          ? Number(item.waste_ratio_percent)
-          : topWasteItem?.waste_ratio_percent !== undefined &&
-            topWasteItem?.waste_ratio_percent !== null
-          ? Number(topWasteItem.waste_ratio_percent)
-          : null;
       const ratio =
-        backendRatioRaw !== null && !Number.isNaN(backendRatioRaw)
-          ? Number(backendRatioRaw.toFixed(2))
+        item.waste_ratio_percent !== undefined && item.waste_ratio_percent !== null
+          ? Number(Number(item.waste_ratio_percent).toFixed(2))
           : total > 0
           ? Number(((waste / total) * 100).toFixed(2))
           : 0;
+
       const rawStatus = String(
-        item.waste_stat ||
-          item.waste_status ||
-          item.current_waste_status ||
-          topWasteItem?.waste_stat ||
-          topWasteItem?.waste_status ||
-          ""
+        item.waste_stat || item.waste_status || item.current_waste_status || ""
       )
         .toLowerCase()
         .trim();
-      const wasteStatus =
-        rawStatus === "critical"
-          ? "critical"
-          : rawStatus === "warning"
-          ? "warning"
-          : rawStatus === "normal" || rawStatus === "ok"
-          ? "normal"
-          : key === latestHistoryDateKey && kpiStatusNormalized
-          ? kpiStatusNormalized
-          : ratio >= 30
-          ? "critical"
-          : ratio >= 15
-          ? "warning"
-          : "normal";
+
+        const patternName = patternByDate[key];
+
+        const wasteStatus =
+          patternName === "High Waste Pattern"
+            ? "critical"
+            : patternName === "Moderate Waste"
+            ? "warning"
+            : patternName === "Efficient Usage"
+            ? "normal"
+            : rawStatus === "critical"
+            ? "critical"
+            : rawStatus === "warning"
+            ? "warning"
+            : rawStatus === "normal" || rawStatus === "ok"
+            ? "normal"
+            : key === latestHistoryDateKey && kpiStatusNormalized
+            ? kpiStatusNormalized
+            : ratio >= 30
+            ? "critical"
+            : ratio >= 15
+            ? "warning"
+            : "normal";
+
       acc[key] = {
         ...item,
         date: key,
         waste_ratio_percent: ratio,
         waste_status: wasteStatus
       };
+
       return acc;
     }, {});
-  }, [history, topWasteDays, kpis]);
+  }, [history, kpis, patternByDate]);
+
   const calendarDays = useMemo(() => {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
     const first = new Date(year, month, 1);
     const start = new Date(year, month, 1 - first.getDay());
+
     return Array.from({ length: 42 }, (_, idx) => {
       const date = new Date(start);
       date.setDate(start.getDate() + idx);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-        date.getDate()
-      ).padStart(2, "0")}`;
+
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}-${String(date.getDate()).padStart(2, "0")}`;
+
       return {
         key,
         date,
@@ -343,39 +458,124 @@ export default function OwnerDashboard() {
       };
     });
   }, [calendarMonth, historyByDate]);
-  const selectedDayData = selectedDay?.date ? historyByDate[selectedDay.date] || selectedDay : null;
-  const monthTitle = calendarMonth.toLocaleString("en-US", { month: "long", year: "numeric" });
-  const handleHistoryPointSelect = (entry) => {
-    if (entry?.activePayload?.[0]?.payload) {
-      const payload = entry.activePayload[0].payload;
-      setSelectedDay({
-        ...payload,
-        date: typeof payload.date === "string" ? payload.date.slice(0, 10) : payload.date
-      });
-      return;
-    }
-    if (entry?.payload) {
-      const payload = entry.payload;
-      setSelectedDay({
-        ...payload,
-        date: typeof payload.date === "string" ? payload.date.slice(0, 10) : payload.date
-      });
-      return;
-    }
-    setSelectedDay(null);
-  };
+
+  const selectedDayData = selectedDay?.date
+    ? historyByDate[selectedDay.date] || selectedDay
+    : null;
+
+  const monthTitle = calendarMonth.toLocaleString("en-US", {
+    month: "long",
+    year: "numeric"
+  });
+
   const handleCalendarDayClick = (day) => {
-    if (!day.data) return;
-    setSelectedDay(day.data);
+    if (day.data) setSelectedDay(day.data);
   };
-  const forecastLegendFormatter = (value) => {
-    const isPredicted = value.toLowerCase().includes("predicted");
-    return (
-      <span className={`legend-label ${isPredicted ? "predicted" : "actual"}`}>
-        {value}
-      </span>
-    );
+
+  const renderForecastLegend = ({ payload = [] }) => (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 14,
+        flexWrap: "wrap"
+      }}
+    >
+      {payload.map((entry) => (
+        <span
+          key={entry.value}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            color: entry.color,
+            fontSize: 13,
+            fontWeight: 600
+          }}
+        >
+          <i
+            style={{
+              width: 18,
+              borderTop: `2px ${String(entry.value).includes("Predicted") ? "dashed" : "solid"} ${entry.color}`
+            }}
+          />
+          {entry.value}
+        </span>
+      ))}
+    </div>
+  );
+
+  const resolvedWasteRatio = useMemo(() => {
+    if (kpis?.waste_ratio_today_percent !== undefined && kpis?.waste_ratio_today_percent !== null) {
+      return Number(kpis.waste_ratio_today_percent).toFixed(2);
+    }
+  
+    const total = Number(kpis?.total_energy_today_kwh || 0);
+    const waste = Number(kpis?.wasted_energy_today_kwh || 0);
+  
+    return total > 0 ? ((waste / total) * 100).toFixed(2) : "0.00";
+  }, [kpis]);
+  
+  const resolvedWasteStatus = useMemo(() => {
+    if (kpis?.current_waste_status && String(kpis.current_waste_status).trim() !== "") {
+      return kpis.current_waste_status;
+    }
+  
+    const ratio = Number(resolvedWasteRatio);
+  
+    if (ratio >= 30) return "Critical";
+    if (ratio >= 15) return "Warning";
+    return "Normal";
+  }, [kpis, resolvedWasteRatio]);
+
+  const handleResolveAlert = async (alertId) => {
+    try {
+      await resolveOwnerAlert(alertId);
+      setAlerts((prev) => prev.filter((item) => item._id !== alertId));
+    } catch (error) {
+      console.error("Resolve alert failed:", error);
+    }
   };
+  
+  const handleDeleteAlert = async (alertId) => {
+    try {
+      await deleteOwnerAlert(alertId);
+      setAlerts((prev) => prev.filter((item) => item._id !== alertId));
+    } catch (error) {
+      console.error("Delete alert failed:", error);
+    }
+  };
+
+  const patternSummary = useMemo(() => {
+    if (!patterns.length) {
+      return {
+        latestPattern: "-",
+        mostCommonPattern: "-",
+        highWasteDays: 0,
+        efficientDays: 0
+      };
+    }
+  
+    const sorted = [...patterns].sort((a, b) => b.date.localeCompare(a.date));
+    const latestPattern = sorted[0]?.pattern_name || "-";
+  
+    const counts = patterns.reduce((acc, item) => {
+      const key = item.pattern_name || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  
+    const mostCommonPattern =
+      Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+  
+    return {
+      latestPattern,
+      mostCommonPattern,
+      highWasteDays: counts["High Waste Pattern"] || 0,
+      efficientDays: counts["Efficient Usage"] || 0
+    };
+  }, [patterns]);
 
   if (loading) return <LoadingState />;
 
@@ -405,14 +605,15 @@ export default function OwnerDashboard() {
         />
         <StatCard
           title="Waste Ratio Today"
-          value={`${kpis?.waste_ratio_today_percent ?? 0}%`}
-          subtitle="compared with total usage"
+          value={`${resolvedWasteRatio}%`}
+          subtitle="Compared with total usage"
           icon={<HiOutlineBuildingOffice2 />}
           tone="green"
         />
+
         <StatCard
           title="Current Waste Status"
-          value={kpis?.current_waste_status || "-"}
+          value={resolvedWasteStatus}
           subtitle="Latest room waste condition"
           icon={<HiOutlineExclamationTriangle />}
           tone="red"
@@ -431,20 +632,27 @@ export default function OwnerDashboard() {
 
           <SectionCard title="Active Alerts">
             <div className="alerts-list">
-              {alerts.length ? (
-                alerts.map((alert, idx) => <AlertCard key={idx} alert={alert} />)
-              ) : (
-                <p>No active owner-level alerts right now.</p>
-              )}
+            {alerts.length ? (
+              alerts.map((alert) => (
+                <AlertCard
+                  key={alert._id}
+                  alert={alert}
+                  onResolve={handleResolveAlert}
+                  onDelete={handleDeleteAlert}
+                />
+              ))
+            ) : (
+              <p>No active owner-level alerts right now.</p>
+            )}
             </div>
           </SectionCard>
         </div>
       ) : (
         <>
-          <SectionCard title="Energy Usage and Waste History">
+          <SectionCard title="Historical and Forecasted Energy Trend">
             <ResponsiveContainer width="100%" height={360}>
-              <ComposedChart className="history-chart" data={history} onClick={handleHistoryPointSelect}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
                 <XAxis
                   dataKey="date"
                   tick={{ fill: "#64748b", fontSize: 12 }}
@@ -465,94 +673,144 @@ export default function OwnerDashboard() {
                     boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
                   }}
                 />
-                <Legend />
+                {forecastSplitDate ? (
+                  <ReferenceLine
+                    x={forecastSplitDate}
+                    stroke="#94a3b8"
+                    strokeDasharray="4 4"
+                    ifOverflow="visible"
+                    label={{
+                      value: "forecast",
+                      position: "insideTopLeft",
+                      fill: "#0f172a",
+                      fontSize: 13
+                    }}
+                  />
+                ) : null}
+                <Legend content={renderForecastLegend} />
                 <Line
-                  type="monotone"
-                  dataKey="total_energy_kwh"
-                  name="Total Energy"
-                  stroke="#2563eb"
-                  strokeWidth={2.6}
-                  dot={{ r: 3, fill: "#2563eb", strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  onClick={handleHistoryPointSelect}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="wasted_energy_kwh"
-                  name="Wasted Energy"
-                  stroke="#f59e0b"
-                  strokeWidth={2.2}
-                  dot={{ r: 3, fill: "#f59e0b", strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  onClick={handleHistoryPointSelect}
-                />
-                <Brush
-                  dataKey="date"
-                  height={16}
-                  travellerWidth={12}
-                  stroke="#cbd5e1"
-                  fill="#ffffff"
-                  tick={{ fill: "#64748b", fontSize: 12 }}
-                  traveller={<BrushCircleHandle />}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </SectionCard>
-
-          <SectionCard title="Forecast: Actual vs Predicted">
-            <ResponsiveContainer width="100%" height={360}>
-              <ComposedChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
-                <XAxis dataKey="date" tick={{ fill: "#64748b" }} />
-                <YAxis tick={{ fill: "#64748b" }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "#ffffff",
-                    border: "1px solid #dbe2ea",
-                    borderRadius: "12px",
-                    color: "#172033",
-                    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
-                  }}
-                />
-                <Legend formatter={forecastLegendFormatter} />
-                <Area
                   type="monotone"
                   dataKey="total_energy_kwh"
                   name="Actual Energy"
-                  stroke="#3b82f6"
-                  fill="#93c5fd"
-                  fillOpacity={0.28}
+                  stroke="#2563eb"
+                  strokeWidth={2.6}
+                  dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
-                <Area
+                <Line
                   type="monotone"
                   dataKey="wasted_energy_kwh"
                   name="Actual Waste"
                   stroke="#f59e0b"
-                  fill="#fcd34d"
-                  fillOpacity={0.26}
+                  strokeWidth={2.2}
+                  dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
                 <Line
                   type="monotone"
                   dataKey="predicted_total_energy_kwh"
                   name="Predicted Energy"
-                  stroke="#6366f1"
-                  strokeWidth={2}
+                  stroke="#2563eb"
+                  strokeWidth={2.6}
                   strokeDasharray="10 6"
                   dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
                 <Line
                   type="monotone"
                   dataKey="predicted_wasted_energy_kwh"
                   name="Predicted Waste"
-                  stroke="#8b5cf6"
-                  strokeWidth={2}
-                  strokeDasharray="2 7"
+                  stroke="#f59e0b"
+                  strokeWidth={2.2}
+                  strokeDasharray="10 6"
                   dot={false}
+                  connectNulls
+                  legendType="plainline"
                 />
               </ComposedChart>
             </ResponsiveContainer>
           </SectionCard>
 
+          <SectionCard title="Abnormal Waste Days">
+            {anomalies.length ? (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Room</th>
+                      <th>Date</th>
+                      <th>Total Energy (kWh)</th>
+                      <th>Wasted Energy (kWh)</th>
+                      <th>Status</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anomalies.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.room_id}</td>
+                        <td>{item.date}</td>
+                        <td>{Number(item.total_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{Number(item.wasted_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{item.status || "Abnormal"}</td>
+                        <td>{item.reason || "Unusual waste pattern detected"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p>No abnormal waste days detected yet.</p>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Weekly Pattern Discovery">
+            {weekdayPatterns.length ? (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Day</th>
+                      <th>Type</th>
+                      <th>Usual Pattern</th>
+                      <th>Avg Energy (kWh)</th>
+                      <th>Avg Waste (kWh)</th>
+                      <th>Avg Waste Ratio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weekdayPatterns.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.weekday_name}</td>
+                        <td>{item.day_type}</td>
+                        <td>
+                          <span
+                            className={
+                              item.usual_pattern === "Efficient Usage"
+                                ? "badge ok"
+                                : item.usual_pattern === "Moderate Waste"
+                                ? "badge warning"
+                                : "badge danger"
+                            }
+                          >
+                            {item.usual_pattern}
+                          </span>
+                        </td>
+                        <td>{Number(item.avg_total_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{Number(item.avg_wasted_energy_kwh || 0).toFixed(2)}</td>
+                        <td>{Number(item.avg_waste_ratio_percent || 0).toFixed(2)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p>No weekday pattern discovery available yet.</p>
+            )}
+          </SectionCard>
           <SectionCard title="Monthly Waste Calendar">
             <div className="owner-calendar-wrap">
               <div className="owner-calendar-toolbar">
@@ -561,19 +819,23 @@ export default function OwnerDashboard() {
                   className="calendar-nav-btn"
                   onClick={() =>
                     setCalendarMonth(
-                      (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                      (prev) =>
+                        new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
                     )
                   }
                 >
                   Prev
                 </button>
+
                 <strong>{monthTitle}</strong>
+
                 <button
                   type="button"
                   className="calendar-nav-btn"
                   onClick={() =>
                     setCalendarMonth(
-                      (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                      (prev) =>
+                        new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
                     )
                   }
                 >
@@ -606,19 +868,37 @@ export default function OwnerDashboard() {
               </div>
 
               <div className="calendar-legend">
-                <span className="legend-item"><i className="dot status-normal" /> Normal</span>
-                <span className="legend-item"><i className="dot status-warning" /> Warning</span>
-                <span className="legend-item"><i className="dot status-critical" /> Critical</span>
+                <span className="legend-item">
+                  <i className="dot status-normal" /> Normal
+                </span>
+                <span className="legend-item">
+                  <i className="dot status-warning" /> Warning
+                </span>
+                <span className="legend-item">
+                  <i className="dot status-critical" /> Critical
+                </span>
               </div>
 
               <div className="selected-day">
                 {selectedDayData ? (
-                  <>
-                    <p><strong>Date:</strong> {selectedDayData.date}</p>
-                    <p><strong>Total Energy:</strong> {formatKwh(selectedDayData.total_energy_kwh)}</p>
-                    <p><strong>Wasted Energy:</strong> {formatKwh(selectedDayData.wasted_energy_kwh)}</p>
-                    <p><strong>Waste Ratio:</strong> {(selectedDayData.waste_ratio_percent ?? 0).toFixed(2)}%</p>
-                  </>
+                  <div className="selected-day-row">
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Date</span>
+                      <strong>{selectedDayData.date}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Total Energy</span>
+                      <strong>{formatKwh(selectedDayData.total_energy_kwh)}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Wasted Energy</span>
+                      <strong>{formatKwh(selectedDayData.wasted_energy_kwh)}</strong>
+                    </div>
+                    <div className="selected-day-item">
+                      <span className="selected-day-label">Waste Ratio</span>
+                      <strong>{Number(selectedDayData.waste_ratio_percent || 0).toFixed(2)}%</strong>
+                    </div>
+                  </div>
                 ) : (
                   <p>Click a colored date to view energy and waste details.</p>
                 )}

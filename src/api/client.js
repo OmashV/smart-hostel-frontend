@@ -19,8 +19,52 @@ export async function getOwnerRoomComparison() {
   return data;
 }
 
-export async function getOwnerAlerts() {
-  const { data } = await api.get(`/rooms/owner/alerts`);
+export async function getOwnerWeekdayPatterns(roomId) {
+  const { data } = await api.get("/rooms/owner/weekday-patterns", {
+    params: roomId ? { roomId } : {}
+  });
+  return data;
+}
+
+export async function getOwnerAlerts(roomId) {
+  const { data } = await api.get("/rooms/owner/alerts", {
+    params: roomId ? { roomId } : {}
+  });
+  return data;
+}
+
+export async function resolveOwnerAlert(alertId) {
+  const { data } = await api.patch(`/rooms/owner/alerts/${alertId}/resolve`);
+  return data;
+}
+
+export async function deleteOwnerAlert(alertId) {
+  const { data } = await api.delete(`/rooms/owner/alerts/${alertId}`);
+  return data;
+}
+
+
+export async function getOwnerAnomalies(roomId) {
+  const { data } = await api.get("/rooms/owner/anomalies", {
+    params: roomId ? { roomId } : {}
+  });
+  return data;
+}
+
+export async function getOwnerFeatureImportance() {
+  const { data } = await api.get(`/rooms/owner/feature-importance`);
+  return data;
+}
+
+
+
+export async function getOwnerPatterns() {
+  const { data } = await api.get(`/rooms/owner/patterns`);
+  return data;
+}
+
+export async function getOwnerForecasts() {
+  const { data } = await api.get(`/rooms/owner/forecasts`);
   return data;
 }
 
@@ -92,4 +136,24 @@ export async function getStudentHistory(roomId = "A101") {
 export async function getStudentAlerts(roomId = "A101", limit = 20) {
   const { data } = await api.get(`/rooms/student/${roomId}/alerts?limit=${limit}`);
   return data;
+}
+
+export async function getWardenFeatureImportance() {
+  const res = await api.get("/rooms/warden/feature-importance");
+  return res.data;
+}
+
+export async function getWardenAnomalies() {
+  const res = await api.get("/rooms/warden/anomalies");
+  return res.data;
+}
+
+export async function getWardenPatterns() {
+  const res = await api.get("/rooms/warden/patterns");
+  return res.data;
+}
+
+export async function getWardenForecasts() {
+  const res = await api.get("/rooms/warden/forecasts");
+  return res.data;
 }
