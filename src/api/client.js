@@ -68,6 +68,26 @@ export async function getOwnerForecasts() {
   return data;
 }
 
+export async function getOwnerFeatureImportance() {
+  const { data } = await api.get(`/rooms/owner/feature-importance`);
+  return data;
+}
+
+export async function getOwnerAnomalies() {
+  const { data } = await api.get(`/rooms/owner/anomalies`);
+  return data;
+}
+
+export async function getOwnerPatterns() {
+  const { data } = await api.get(`/rooms/owner/patterns`);
+  return data;
+}
+
+export async function getOwnerForecasts() {
+  const { data } = await api.get(`/rooms/owner/forecasts`);
+  return data;
+}
+
 export async function getEnergyHistory(roomId = "A101") {
   const { data } = await api.get(`/rooms/${roomId}/energy/history`);
   return data;
