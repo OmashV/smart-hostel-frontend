@@ -108,20 +108,50 @@ export async function getWardenNoiseTrend(days = 7) {
   return data;
 }
 
-export async function getSecuritySummary() {
-  const { data } = await api.get(`/rooms/security/summary`);
+export async function getSecuritySummary(roomId) {
+  const { data } = await api.get(`/rooms/security/summary`, {
+    params: roomId ? { roomId } : {}
+  });
   return data;
 }
 
-export async function getSecuritySuspiciousRooms() {
-  const { data } = await api.get(`/rooms/security/suspicious-rooms`);
+export async function getSecuritySuspiciousRooms(roomId) {
+  const { data } = await api.get(`/rooms/security/suspicious-rooms`, {
+    params: roomId ? { roomId } : {}
+  });
   return data;
 }
 
-export async function getSecurityDoorEvents(limit = 50) {
-  const { data } = await api.get(`/rooms/security/door-events?limit=${limit}`);
+export async function getSecurityDoorEvents(roomId, limit = 50) {
+  const { data } = await api.get(`/rooms/security/door-events`, {
+    params: {
+      ...(roomId ? { roomId } : {}),
+      limit
+    }
+  });
   return data;
 }
+
+export async function getSecurityTrend(roomId, limit = 200) {
+  const { data } = await api.get(`/rooms/security/trend`, {
+    params: {
+      ...(roomId ? { roomId } : {}),
+      limit
+    }
+  });
+  return data;
+}
+
+export async function getSecurityAnomalies(roomId, limit = 50) {
+  const { data } = await api.get(`/rooms/security/anomalies`, {
+    params: {
+      ...(roomId ? { roomId } : {}),
+      limit
+    }
+  });
+  return data;
+}
+
 
 export async function getStudentOverview(roomId = "A101") {
   const { data } = await api.get(`/rooms/student/${roomId}/overview`);
