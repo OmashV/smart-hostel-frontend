@@ -409,6 +409,13 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.student-noise-primary-grid,
+.student-noise-lower-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .student-chart-wrap {
   width: 100%;
   min-height: 220px;
@@ -452,6 +459,22 @@
 .student-muted-text {
   margin: 10px 0 0;
   color: var(--muted);
+}
+
+.student-noise-interpretation {
+  display: grid;
+  gap: 8px;
+}
+
+.student-noise-interpretation p {
+  margin: 0;
+}
+
+.student-noise-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .student-filter-row {
@@ -559,6 +582,11 @@
 
   .student-energy-primary-grid,
   .student-energy-insight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-noise-primary-grid,
+  .student-noise-lower-grid {
     grid-template-columns: 1fr;
   }
 }

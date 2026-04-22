@@ -4,14 +4,15 @@ import { formatTimestamp, toTitleCase } from "../utils/overviewHelpers";
 import StudentEmptyState from "./StudentEmptyState";
 import StudentStatusBadge from "./StudentStatusBadge";
 
-export default function StudentAlertPreviewList({ alerts = [], maxItems = 5 }) {
+export default function StudentAlertPreviewList({
+  alerts = [],
+  maxItems = 5,
+  emptyTitle = "No recent alerts",
+  emptyMessage = "No warning or critical room events were found in the selected window.",
+  ctaLabel = "View all alerts"
+}) {
   if (!alerts.length) {
-    return (
-      <StudentEmptyState
-        title="No recent alerts"
-        message="No warning or critical room events were found in the current overview window."
-      />
-    );
+    return <StudentEmptyState title={emptyTitle} message={emptyMessage} />;
   }
 
   return (
@@ -31,9 +32,8 @@ export default function StudentAlertPreviewList({ alerts = [], maxItems = 5 }) {
       ))}
 
       <Link className="student-link-button" to={STUDENT_ROUTE_PATHS.alerts}>
-        View all alerts
+        {ctaLabel}
       </Link>
     </div>
   );
 }
-

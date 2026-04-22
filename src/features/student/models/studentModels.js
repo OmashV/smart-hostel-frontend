@@ -262,6 +262,47 @@ export function normalizeStudentEnergyHistoryResponse(payload = {}) {
 
 /**
  * @param {Object} payload
+ * @returns {{
+ *   roomId: string|null,
+ *   range: {from?: string, to?: string, range?: string|null}|null,
+ *   groupBy: string,
+ *   summary: {
+ *     averageNoisePeak: number,
+ *     noisyIntervals: number,
+ *     quietViolations: number,
+ *     peakNoiseValue: number,
+ *     peakNoiseAt: string|null
+ *   },
+ *   points: StudentNoisePoint[]
+ * }}
+ */
+export function normalizeStudentNoiseHistoryResponse(payload = {}) {
+  const source = Array.isArray(payload.points) ? payload.points : [];
+  const points = source.map((item) => ({
+    timestamp: item.timestamp || null,
+    soundPeak: toNumber(item.soundPeak),
+    noiseStatus: toStatus(item.noiseStatus, "Normal")
+  }));
+
+  const summary = payload.summary || {};
+
+  return {
+    roomId: payload.roomId || payload.room_id || null,
+    range: payload.range || null,
+    groupBy: payload.groupBy || "day",
+    summary: {
+      averageNoisePeak: toNumber(summary.averageNoisePeak),
+      noisyIntervals: toNumber(summary.noisyIntervals),
+      quietViolations: toNumber(summary.quietViolations),
+      peakNoiseValue: toNumber(summary.peakNoiseValue),
+      peakNoiseAt: summary.peakNoiseAt || null
+    },
+    points
+  };
+}
+
+/**
+ * @param {Object} payload
  * @returns {{ roomId: string|null, alerts: StudentAlert[] }}
  */
 export function normalizeStudentAlertsResponse(payload = {}) {

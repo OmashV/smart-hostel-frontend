@@ -3,6 +3,7 @@ import { DEFAULT_STUDENT_ROOM_ID } from "../constants/studentConstants";
 import {
   normalizeStudentAlertsResponse,
   normalizeStudentEnergyHistoryResponse,
+  normalizeStudentNoiseHistoryResponse,
   normalizeStudentOverviewResponse
 } from "../models/studentModels";
 
@@ -36,7 +37,7 @@ export async function getStudentAlerts(roomId = DEFAULT_STUDENT_ROOM_ID, params 
 export async function getStudentNoiseHistory(roomId = DEFAULT_STUDENT_ROOM_ID, params = {}) {
   const targetRoom = resolveRoomId(roomId);
   const { data } = await api.get(`/rooms/student/${targetRoom}/noise/history`, { params });
-  return data;
+  return normalizeStudentNoiseHistoryResponse(data);
 }
 
 export async function getStudentAlertsSummary(roomId = DEFAULT_STUDENT_ROOM_ID, params = {}) {
