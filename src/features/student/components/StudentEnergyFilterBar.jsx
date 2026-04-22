@@ -13,7 +13,7 @@ const GROUP_BY_OPTIONS = [
 export default function StudentEnergyFilterBar({ filters, onChange, onRefresh, loading }) {
   return (
     <div className="student-energy-filter-bar">
-      <label>
+      <label className="student-filter-control">
         Date Range
         <select
           value={filters.range}
@@ -28,7 +28,7 @@ export default function StudentEnergyFilterBar({ filters, onChange, onRefresh, l
         </select>
       </label>
 
-      <label>
+      <label className="student-filter-control">
         Group By
         <select
           value={filters.groupBy}
@@ -43,10 +43,9 @@ export default function StudentEnergyFilterBar({ filters, onChange, onRefresh, l
         </select>
       </label>
 
-      <button type="button" className="student-button" onClick={onRefresh} disabled={loading}>
+      <button type="button" className="student-button student-button-compact" onClick={onRefresh} disabled={loading}>
         {loading ? "Refreshing..." : "Refresh"}
       </button>
     </div>
   );
 }
-

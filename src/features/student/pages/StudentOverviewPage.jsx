@@ -127,12 +127,14 @@ export default function StudentOverviewPage() {
   }
 
   return (
-    <div className="student-page">
+    <div className="student-page student-page-overview">
       <StudentPageHeader
         title="My Usage Overview"
         description="Track your room's current conditions, daily energy usage, and actions to improve efficiency."
         roomId={roomId}
         lastUpdated={latestUpdatedAt}
+        variant="hero"
+        kicker="My Room Intelligence"
       />
 
       <div className="student-kpi-grid">

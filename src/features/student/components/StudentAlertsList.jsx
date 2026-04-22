@@ -24,6 +24,7 @@ export default function StudentAlertsList({ alerts = [], selectedAlertId, onSele
             type="button"
             className={`student-alert-row ${isActive ? "active" : ""}`}
             onClick={() => onSelect(alert)}
+            aria-pressed={isActive}
           >
             <div className="student-alert-row-top">
               <div className="student-preview-badges">

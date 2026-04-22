@@ -1,6 +1,9 @@
 export default function StudentErrorState({ message, onRetry }) {
   return (
     <div className="student-error-state">
+      <p className="student-state-icon" aria-hidden>
+        !
+      </p>
       <p className="student-error-title">Unable to load this section</p>
       <p>{message || "Please try again in a moment."}</p>
       {onRetry ? (
@@ -11,4 +14,3 @@ export default function StudentErrorState({ message, onRetry }) {
     </div>
   );
 }
-

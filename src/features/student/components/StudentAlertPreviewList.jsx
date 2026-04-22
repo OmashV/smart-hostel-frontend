@@ -31,9 +31,11 @@ export default function StudentAlertPreviewList({
         </article>
       ))}
 
-      <Link className="student-link-button" to={STUDENT_ROUTE_PATHS.alerts}>
-        {ctaLabel}
-      </Link>
+      <div className="student-preview-footer">
+        <Link className="student-link-button" to={STUDENT_ROUTE_PATHS.alerts}>
+          {ctaLabel}
+        </Link>
+      </div>
     </div>
   );
 }

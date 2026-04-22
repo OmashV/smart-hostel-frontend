@@ -16,16 +16,15 @@ export default function StudentRecommendationList({ items = [], maxItems = 4 }) 
       {items.slice(0, maxItems).map((item) => (
         <article key={item.id} className="student-recommendation-item">
           <div className="student-recommendation-top">
-            <strong>{item.title}</strong>
+            <strong className="student-recommendation-title">{item.title}</strong>
             <div className="student-preview-badges">
               <StudentStatusBadge value={item.priority} />
               <StudentStatusBadge value={item.category} />
             </div>
           </div>
-          <p>{item.message}</p>
+          <p className="student-recommendation-message">{item.message}</p>
         </article>
       ))}
     </div>
   );
 }
-

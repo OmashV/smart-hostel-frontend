@@ -1,9 +1,18 @@
 import { formatTimestamp } from "../utils/overviewHelpers";
 
-export default function StudentPageHeader({ title, description, roomId, lastUpdated, rightSlot }) {
+export default function StudentPageHeader({
+  title,
+  description,
+  roomId,
+  lastUpdated,
+  rightSlot,
+  variant = "default",
+  kicker = "Student Analytics"
+}) {
   return (
-    <header className="student-page-header">
-      <div>
+    <header className={`student-page-header ${variant === "hero" ? "hero" : ""}`}>
+      <div className="student-page-header-main">
+        <p className="student-page-kicker">{kicker}</p>
         <h2>{title}</h2>
         {description ? <p>{description}</p> : null}
       </div>

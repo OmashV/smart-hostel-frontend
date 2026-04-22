@@ -33,6 +33,18 @@ import {
 } from "../utils/noiseHelpers";
 import { formatTimestamp } from "../utils/overviewHelpers";
 
+const CHART_TOOLTIP_STYLE = {
+  borderRadius: 12,
+  border: "1px solid rgba(129, 140, 248, 0.45)",
+  background: "rgba(255, 255, 255, 0.96)",
+  boxShadow: "0 12px 26px rgba(30, 64, 175, 0.16)"
+};
+
+const CHART_TOOLTIP_LABEL_STYLE = {
+  color: "#1e3a8a",
+  fontWeight: 600
+};
+
 function getRequestErrorMessage(error) {
   return (
     error?.response?.data?.error?.message ||
@@ -186,13 +198,14 @@ export default function StudentNoisePage() {
   }
 
   return (
-    <div className="student-page">
+    <div className="student-page student-page-noise">
       <StudentPageHeader
         title="Noise Monitoring"
         description="Track room noise patterns, peak periods, and quiet-hour behavior over time."
         roomId={roomId}
         lastUpdated={lastUpdated}
         rightSlot={rightMeta}
+        kicker="Noise Intelligence"
       />
 
       <StudentEnergyFilterBar
@@ -235,6 +248,8 @@ export default function StudentNoisePage() {
                   <XAxis dataKey="timestamp" tickFormatter={(value) => formatNoiseTick(value, filters.groupBy)} />
                   <YAxis />
                   <Tooltip
+                    contentStyle={CHART_TOOLTIP_STYLE}
+                    labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                     labelFormatter={(value) => formatNoiseTooltipLabel(value, filters.groupBy)}
                     formatter={(value, key, item) => {
                       if (key === "noiseStatus") return [String(value), "Status"];
@@ -246,7 +261,7 @@ export default function StudentNoisePage() {
                     type="monotone"
                     dataKey="soundPeak"
                     name="Noise Peak"
-                    stroke="#ef4444"
+                    stroke="#8b5cf6"
                     strokeWidth={2}
                     dot={false}
                   />
@@ -287,11 +302,13 @@ export default function StudentNoisePage() {
                     <XAxis dataKey="timestamp" tickFormatter={(value) => formatNoiseTick(value, filters.groupBy)} />
                     <YAxis />
                     <Tooltip
+                      contentStyle={CHART_TOOLTIP_STYLE}
+                      labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                       labelFormatter={(value) => formatNoiseTooltipLabel(value, filters.groupBy)}
                       formatter={(value) => [`${Number(value).toFixed(1)} peak`, "Noise Peak"]}
                     />
                     <Legend />
-                    <Bar dataKey="soundPeak" fill="#f97316" name="Top Peaks" />
+                    <Bar dataKey="soundPeak" fill="#ec4899" name="Top Peaks" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

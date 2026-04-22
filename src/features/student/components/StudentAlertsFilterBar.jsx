@@ -20,7 +20,7 @@ export default function StudentAlertsFilterBar({
 }) {
   return (
     <div className="student-energy-filter-bar student-alerts-filter-bar">
-      <label>
+      <label className="student-filter-control">
         Date Range
         <select
           value={filters.range}
@@ -35,7 +35,7 @@ export default function StudentAlertsFilterBar({
         </select>
       </label>
 
-      <label>
+      <label className="student-filter-control">
         Alert Type
         <select
           value={filters.type}
@@ -50,7 +50,7 @@ export default function StudentAlertsFilterBar({
         </select>
       </label>
 
-      <label>
+      <label className="student-filter-control">
         Severity
         <select
           value={filters.severity}
@@ -65,7 +65,7 @@ export default function StudentAlertsFilterBar({
         </select>
       </label>
 
-      <button type="button" className="student-button" onClick={onRefresh} disabled={loading}>
+      <button type="button" className="student-button student-button-compact" onClick={onRefresh} disabled={loading}>
         {loading ? "Refreshing..." : "Refresh"}
       </button>
     </div>

@@ -6,11 +6,12 @@ export default function StudentModuleLayout() {
   return (
     <div className="student-module">
       <header className="student-module-header">
-        <div>
+        <div className="student-module-header-main">
+          <p className="student-module-kicker">Smart Hostel Analytics</p>
           <h1>Student Analytics</h1>
-          <p>Structured student overview, energy, noise, and alerts pages for upcoming phases.</p>
+          <p>Personal dashboard for room usage, noise trends, energy insights, and alert monitoring.</p>
         </div>
-        <p className="student-room-pill">Demo Room: {DEFAULT_STUDENT_ROOM_ID}</p>
+        <p className="student-room-pill student-module-room-pill">Demo Room: {DEFAULT_STUDENT_ROOM_ID}</p>
       </header>
 
       <StudentSubNav />
@@ -19,4 +20,3 @@ export default function StudentModuleLayout() {
     </div>
   );
 }
-

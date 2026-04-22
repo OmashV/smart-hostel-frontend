@@ -37,6 +37,18 @@ import {
 } from "../utils/energyHelpers";
 import { formatKwh, formatTimestamp } from "../utils/overviewHelpers";
 
+const CHART_TOOLTIP_STYLE = {
+  borderRadius: 12,
+  border: "1px solid rgba(129, 140, 248, 0.45)",
+  background: "rgba(255, 255, 255, 0.96)",
+  boxShadow: "0 12px 26px rgba(30, 64, 175, 0.16)"
+};
+
+const CHART_TOOLTIP_LABEL_STYLE = {
+  color: "#1e3a8a",
+  fontWeight: 600
+};
+
 function getRequestErrorMessage(error) {
   return (
     error?.response?.data?.error?.message ||
@@ -212,13 +224,14 @@ export default function StudentEnergyPage() {
   }
 
   return (
-    <div className="student-page">
+    <div className="student-page student-page-energy">
       <StudentPageHeader
         title="Energy Usage"
         description="Understand your room's energy trend, waste behavior, and short-term usage estimates."
         roomId={roomId}
         lastUpdated={lastUpdated}
         rightSlot={rightMeta}
+        kicker="Energy Analytics"
       />
 
       <StudentEnergyFilterBar
@@ -260,6 +273,8 @@ export default function StudentEnergyPage() {
                   <XAxis dataKey="timestamp" tickFormatter={(value) => formatEnergyTick(value, filters.groupBy)} />
                   <YAxis unit=" kWh" />
                   <Tooltip
+                    contentStyle={CHART_TOOLTIP_STYLE}
+                    labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                     labelFormatter={(value) => formatEnergyTooltipLabel(value, filters.groupBy)}
                     formatter={(value) => [`${Number(value).toFixed(2)} kWh`, "Total Energy"]}
                   />
@@ -268,7 +283,7 @@ export default function StudentEnergyPage() {
                     type="monotone"
                     dataKey="totalEnergy"
                     name="Total Energy"
-                    stroke="#2563eb"
+                    stroke="#4f46e5"
                     strokeWidth={2}
                     dot={false}
                   />
@@ -296,11 +311,13 @@ export default function StudentEnergyPage() {
                     <XAxis dataKey="timestamp" tickFormatter={(value) => formatEnergyTick(value, filters.groupBy)} />
                     <YAxis unit=" kWh" />
                     <Tooltip
+                      contentStyle={CHART_TOOLTIP_STYLE}
+                      labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                       labelFormatter={(value) => formatEnergyTooltipLabel(value, filters.groupBy)}
                       formatter={(value) => [`${Number(value).toFixed(2)} kWh`, "Wasted Energy"]}
                     />
                     <Legend />
-                    <Bar dataKey="wastedEnergy" name="Wasted Energy" fill="#f97316" />
+                    <Bar dataKey="wastedEnergy" name="Wasted Energy" fill="#f59e0b" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -351,8 +368,12 @@ export default function StudentEnergyPage() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" />
                       <YAxis unit=" kWh" />
-                      <Tooltip formatter={(value) => [`${Number(value).toFixed(2)} kWh`, "Average"]} />
-                      <Bar dataKey="value" fill="#0ea5e9" />
+                      <Tooltip
+                        contentStyle={CHART_TOOLTIP_STYLE}
+                        labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+                        formatter={(value) => [`${Number(value).toFixed(2)} kWh`, "Average"]}
+                      />
+                      <Bar dataKey="value" fill="#6366f1" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -383,6 +404,8 @@ export default function StudentEnergyPage() {
                     <XAxis dataKey="timestamp" tickFormatter={(value) => formatEnergyTick(value, filters.groupBy)} />
                     <YAxis unit=" kWh" />
                     <Tooltip
+                      contentStyle={CHART_TOOLTIP_STYLE}
+                      labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                       labelFormatter={(value) => formatEnergyTooltipLabel(value, filters.groupBy)}
                       formatter={(value, name) => [
                         `${Number(value).toFixed(2)} kWh`,
@@ -394,7 +417,7 @@ export default function StudentEnergyPage() {
                       type="monotone"
                       dataKey="historicalEnergy"
                       name="Historical"
-                      stroke="#1d4ed8"
+                      stroke="#2563eb"
                       strokeWidth={2}
                       dot={false}
                     />
@@ -402,7 +425,7 @@ export default function StudentEnergyPage() {
                       type="monotone"
                       dataKey="forecastEnergy"
                       name="Forecast"
-                      stroke="#f97316"
+                      stroke="#a855f7"
                       strokeWidth={2}
                       strokeDasharray="6 4"
                       dot={false}
@@ -463,4 +486,3 @@ export default function StudentEnergyPage() {
     </div>
   );
 }
-

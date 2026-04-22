@@ -21,6 +21,13 @@ import {
 } from "../utils/alertsHelpers";
 import { toTitleCase } from "../utils/overviewHelpers";
 
+const CHART_TOOLTIP_STYLE = {
+  borderRadius: 12,
+  border: "1px solid rgba(129, 140, 248, 0.45)",
+  background: "rgba(255, 255, 255, 0.96)",
+  boxShadow: "0 12px 26px rgba(30, 64, 175, 0.16)"
+};
+
 function getRequestErrorMessage(error) {
   return (
     error?.response?.data?.error?.message ||
@@ -170,13 +177,14 @@ export default function StudentAlertsPage() {
   }
 
   return (
-    <div className="student-page">
+    <div className="student-page student-page-alerts">
       <StudentPageHeader
         title="Personal Alerts"
         description="Track your alert severity, filter incident types, and review details that need attention first."
         roomId={roomId}
         lastUpdated={lastUpdated}
         rightSlot={rightMeta}
+        kicker="Alert Center"
       />
 
       <StudentAlertsFilterBar
@@ -223,8 +231,11 @@ export default function StudentAlertsPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="type" />
                     <YAxis allowDecimals={false} />
-                    <Tooltip formatter={(value) => [Number(value), "Alerts"]} />
-                    <Bar dataKey="count" fill="#6366f1" />
+                    <Tooltip
+                      contentStyle={CHART_TOOLTIP_STYLE}
+                      formatter={(value) => [Number(value), "Alerts"]}
+                    />
+                    <Bar dataKey="count" fill="#7c3aed" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
