@@ -27,7 +27,8 @@ import {
   getWardenFeatureImportance,
   getWardenAnomalies,
   getWardenPatterns,
-  getWardenForecasts
+  getWardenForecasts,
+  getWardenHistory,
 } from "../api/client";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
@@ -288,6 +289,7 @@ export default function WardenDashboard() {
   const [rooms, setRooms] = useState([]);
   const [inspectionQueue, setInspectionQueue] = useState([]);
   const [noiseTrend, setNoiseTrend] = useState([]);
+  const [wardenHistory, setWardenHistory] = useState([]);
   const [error, setError] = useState("");
 
   const [selectedFloor, setSelectedFloor] = useState("All");
@@ -321,7 +323,8 @@ export default function WardenDashboard() {
   forecastRes,
   anomalyRes,
   patternRes,
-  featureImportanceRes
+  featureImportanceRes,
+  historyRes 
 ] = await Promise.all([
   getWardenSummary(),
   getWardenRoomsStatus(),
@@ -331,7 +334,8 @@ export default function WardenDashboard() {
   getWardenForecasts(),
   getWardenAnomalies(),
   getWardenPatterns(),
-  getWardenFeatureImportance()
+  getWardenFeatureImportance(),
+  getWardenHistory(7, selectedRoomFilterRef.current)
 ]);
 
       const latestRooms = roomsRes.rooms || [];
@@ -346,6 +350,7 @@ export default function WardenDashboard() {
       setWardenAnomalies(anomalyRes.items || []);
       setWardenPatterns(patternRes.items || []);
       setWardenFeatureImportance(featureImportanceRes.items || []);
+      setWardenHistory(historyRes.items || []);
 
       const currentRoomFilter = selectedRoomFilterRef.current;
       const scopedInspection =
@@ -552,84 +557,19 @@ export default function WardenDashboard() {
   }, [inspectionQueue, selectedRoomFilter]);
 
   const adjustedNoiseTrend = useMemo(() => {
-    const trend = [...noiseTrend];
-    const today = new Date().toISOString().split("T")[0];
-
-    const todayWarnings = inspectionQueue.filter((room) => {
-      const noiseState = String(room.noise_stat || "").toLowerCase();
-      const reasonMatch = (room.inspection_reasons || []).some((reason) => {
-        const text = reason.toLowerCase();
-        return text.includes("noise") && !text.includes("violation");
-      });
-
-      return (
-        noiseState.includes("complaint") ||
-        noiseState.includes("warning") ||
-        reasonMatch
-      );
-    }).length;
-
-    const todayViolations = inspectionQueue.filter((room) => {
-      const noiseState = String(room.noise_stat || "").toLowerCase();
-      const reasonMatch = (room.inspection_reasons || []).some((reason) =>
-        reason.toLowerCase().includes("violation")
-      );
-
-      return noiseState.includes("violation") || reasonMatch;
-    }).length;
-
-    const todayIndex = trend.findIndex((entry) => entry.date === today);
-
-    if (todayIndex >= 0) {
-      trend[todayIndex] = {
-        ...trend[todayIndex],
-        warnings: todayWarnings,
-        violations: todayViolations
-      };
-    } else {
-      trend.push({
-        date: today,
-        warnings: todayWarnings,
-        violations: todayViolations
-      });
-    }
-
-    return trend;
-  }, [noiseTrend, inspectionQueue]);
+  return wardenHistory.map((item) => ({
+    date: item.date,
+    warnings: item.warning_count || 0,
+    violations: item.violation_count || 0
+  }));
+}, [wardenHistory]);
   const occupancyTrend = useMemo(() => {
-  const trend = [];
-  const today = new Date();
-
-  for (let i = 6; i >= 0; i -= 1) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const dateKey = d.toISOString().split("T")[0];
-
-    if (i === 0) {
-      const occupied = rooms.filter(
-        (room) => String(room.occupancy_stat || "").toLowerCase() === "occupied"
-      ).length;
-
-      const empty = rooms.filter(
-        (room) => String(room.occupancy_stat || "").toLowerCase() === "empty"
-      ).length;
-
-      trend.push({
-        date: dateKey,
-        occupied,
-        empty
-      });
-    } else {
-      trend.push({
-        date: dateKey,
-        occupied: 0,
-        empty: 0
-      });
-    }
-  }
-
-  return trend;
-}, [rooms]);
+  return wardenHistory.map((item) => ({
+    date: item.date,
+    occupied: item.occupied_count || 0,
+    empty: item.empty_count || 0
+  }));
+}, [wardenHistory]);
   const displayedOccupied =
     selectedRoomFilter === "All"
       ? summary?.occupied_rooms ?? 0
