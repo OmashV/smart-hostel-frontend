@@ -2,6 +2,7 @@ import { api } from "../../../api/client";
 import { DEFAULT_STUDENT_ROOM_ID } from "../constants/studentConstants";
 import {
   normalizeStudentAlertsResponse,
+  normalizeStudentAlertsSummaryResponse,
   normalizeStudentEnergyHistoryResponse,
   normalizeStudentNoiseHistoryResponse,
   normalizeStudentOverviewResponse
@@ -43,7 +44,7 @@ export async function getStudentNoiseHistory(roomId = DEFAULT_STUDENT_ROOM_ID, p
 export async function getStudentAlertsSummary(roomId = DEFAULT_STUDENT_ROOM_ID, params = {}) {
   const targetRoom = resolveRoomId(roomId);
   const { data } = await api.get(`/rooms/student/${targetRoom}/alerts/summary`, { params });
-  return data;
+  return normalizeStudentAlertsSummaryResponse(data);
 }
 
 export async function getStudentEnergyComparison(roomId = DEFAULT_STUDENT_ROOM_ID, params = {}) {

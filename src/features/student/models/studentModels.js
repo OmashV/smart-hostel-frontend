@@ -18,6 +18,7 @@ import { DEFAULT_STUDENT_FILTERS } from "../constants/studentConstants";
  * @property {string} message
  * @property {string|null} timestamp
  * @property {string} status
+ * @property {string|null} sourceReadingId
  */
 
 /**
@@ -145,6 +146,7 @@ function normalizeAlert(rawAlert, index) {
     message,
     timestamp,
     status: rawAlert?.status || "open",
+    sourceReadingId: rawAlert?.sourceReadingId || rawAlert?.source_reading_id || null,
     soundPeak: toNumber(rawAlert?.soundPeak ?? rawAlert?.sound_peak),
     noiseStatus: toStatus(noiseStatus, "Normal")
   };
@@ -313,7 +315,46 @@ export function normalizeStudentAlertsResponse(payload = {}) {
 
   return {
     roomId: payload.roomId || payload.room_id || null,
+    filters: payload.filters || null,
+    total: toNumber(payload.total ?? alerts.length),
     alerts
+  };
+}
+
+/**
+ * @param {Object} payload
+ * @returns {{
+ *   roomId: string|null,
+ *   total: number,
+ *   active: number,
+ *   critical: number,
+ *   warning: number,
+ *   info: number,
+ *   byType: Array<{type: string, count: number}>
+ * }}
+ */
+export function normalizeStudentAlertsSummaryResponse(payload = {}) {
+  const byTypeEntries =
+    payload.byType && typeof payload.byType === "object" && !Array.isArray(payload.byType)
+      ? Object.entries(payload.byType)
+      : [];
+
+  const byType = byTypeEntries
+    .map(([type, count]) => ({
+      type: String(type || "").toLowerCase(),
+      count: toNumber(count)
+    }))
+    .filter((item) => item.type)
+    .sort((left, right) => right.count - left.count);
+
+  return {
+    roomId: payload.roomId || payload.room_id || null,
+    total: toNumber(payload.total),
+    active: toNumber(payload.active),
+    critical: toNumber(payload.critical),
+    warning: toNumber(payload.warning),
+    info: toNumber(payload.info),
+    byType
   };
 }
 

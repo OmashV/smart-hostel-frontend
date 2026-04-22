@@ -1,132 +1,301 @@
 import { useEffect, useMemo, useState } from "react";
-import { getStudentAlerts } from "../api/studentApi";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { getStudentAlerts, getStudentAlertsSummary } from "../api/studentApi";
+import StudentAlertDetailCard from "../components/StudentAlertDetailCard";
+import StudentAlertsFilterBar from "../components/StudentAlertsFilterBar";
+import StudentAlertsList from "../components/StudentAlertsList";
 import StudentEmptyState from "../components/StudentEmptyState";
 import StudentErrorState from "../components/StudentErrorState";
 import StudentKpiCard from "../components/StudentKpiCard";
 import StudentLoadingState from "../components/StudentLoadingState";
 import StudentPageHeader from "../components/StudentPageHeader";
 import StudentSectionCard from "../components/StudentSectionCard";
-import { DEFAULT_STUDENT_ROOM_ID, STUDENT_PAGE_DESCRIPTIONS } from "../constants/studentConstants";
-import { createStudentFilters } from "../models/studentModels";
+import { DEFAULT_STUDENT_ROOM_ID } from "../constants/studentConstants";
+import {
+  buildAlertPriorityGuidance,
+  buildAlertsSummaryFallback,
+  buildAlertTypeOptions,
+  formatAlertPercentage,
+  formatAlertTypeLabel,
+  sortAlertsNewestFirst
+} from "../utils/alertsHelpers";
+import { toTitleCase } from "../utils/overviewHelpers";
+
+function getRequestErrorMessage(error) {
+  return (
+    error?.response?.data?.error?.message ||
+    error?.response?.data?.message ||
+    error?.message ||
+    "Failed to load personal alerts."
+  );
+}
 
 export default function StudentAlertsPage() {
-  const [alerts, setAlerts] = useState([]);
-  const [filters, setFilters] = useState(createStudentFilters());
+  const [filters, setFilters] = useState({ range: "7d", type: "all", severity: "all" });
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  const [summaryData, setSummaryData] = useState(null);
+  const [alertsResponse, setAlertsResponse] = useState(null);
+  const [partialErrors, setPartialErrors] = useState({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const loadAlerts = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await getStudentAlerts(DEFAULT_STUDENT_ROOM_ID, { limit: 100 });
-      setAlerts(response.alerts);
-    } catch (err) {
-      setError(err?.message || "Failed to load student alerts.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [fatalError, setFatalError] = useState("");
+  const [selectedAlertId, setSelectedAlertId] = useState("");
 
   useEffect(() => {
-    loadAlerts();
-  }, []);
+    let cancelled = false;
 
-  const filteredAlerts = useMemo(() => {
-    return alerts.filter((alert) => {
-      const matchesType = filters.alertType === "all" || alert.type === filters.alertType;
-      const matchesSeverity = filters.severity === "all" || alert.severity === filters.severity;
-      return matchesType && matchesSeverity;
-    });
-  }, [alerts, filters]);
+    async function loadAlertsPage() {
+      if (!cancelled) {
+        setLoading(true);
+        setFatalError("");
+        setPartialErrors({});
+      }
 
-  if (loading) {
+      const params = {
+        range: filters.range,
+        limit: 100
+      };
+
+      if (filters.type !== "all") {
+        params.type = filters.type;
+      }
+
+      if (filters.severity !== "all") {
+        params.severity = filters.severity;
+      }
+
+      const [summaryRes, alertsRes] = await Promise.allSettled([
+        getStudentAlertsSummary(DEFAULT_STUDENT_ROOM_ID, params),
+        getStudentAlerts(DEFAULT_STUDENT_ROOM_ID, params)
+      ]);
+
+      if (cancelled) return;
+
+      const nextPartialErrors = {};
+      const summaryFailed = summaryRes.status !== "fulfilled";
+      const listFailed = alertsRes.status !== "fulfilled";
+
+      if (summaryFailed && listFailed) {
+        setSummaryData(null);
+        setAlertsResponse(null);
+        setFatalError(getRequestErrorMessage(alertsRes.reason || summaryRes.reason));
+        setLoading(false);
+        return;
+      }
+
+      if (summaryRes.status === "fulfilled") {
+        setSummaryData(summaryRes.value);
+      } else {
+        setSummaryData(null);
+        nextPartialErrors.summary = getRequestErrorMessage(summaryRes.reason);
+      }
+
+      if (alertsRes.status === "fulfilled") {
+        setAlertsResponse(alertsRes.value);
+      } else {
+        setAlertsResponse(null);
+        nextPartialErrors.list = getRequestErrorMessage(alertsRes.reason);
+      }
+
+      setPartialErrors(nextPartialErrors);
+      setLoading(false);
+    }
+
+    loadAlertsPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.range, filters.severity, filters.type, refreshTick]);
+
+  const alerts = useMemo(
+    () => sortAlertsNewestFirst(Array.isArray(alertsResponse?.alerts) ? alertsResponse.alerts : []),
+    [alertsResponse]
+  );
+
+  const effectiveSummary = useMemo(() => {
+    if (summaryData) return summaryData;
+    return buildAlertsSummaryFallback(alerts);
+  }, [summaryData, alerts]);
+
+  const typeOptions = useMemo(
+    () => buildAlertTypeOptions(effectiveSummary?.byType || [], alerts),
+    [effectiveSummary, alerts]
+  );
+
+  const selectedAlert = useMemo(
+    () => alerts.find((item) => item.id === selectedAlertId) || alerts[0] || null,
+    [alerts, selectedAlertId]
+  );
+
+  const breakdownItems = useMemo(
+    () => (effectiveSummary?.byType || []).filter((item) => Number(item.count) > 0),
+    [effectiveSummary]
+  );
+
+  const breakdownChartData = useMemo(
+    () =>
+      breakdownItems.map((item) => ({
+        type: formatAlertTypeLabel(item.type),
+        count: Number(item.count || 0)
+      })),
+    [breakdownItems]
+  );
+
+  const priorityGuidance = useMemo(
+    () => buildAlertPriorityGuidance(effectiveSummary, alerts),
+    [effectiveSummary, alerts]
+  );
+
+  const roomId = summaryData?.roomId || alertsResponse?.roomId || DEFAULT_STUDENT_ROOM_ID;
+  const lastUpdated = alerts[0]?.timestamp || null;
+  const hasAnyData = Boolean(summaryData || alertsResponse);
+  const summarySourceText = summaryData
+    ? "From alerts summary endpoint"
+    : "Derived from currently loaded alert list";
+
+  const rightMeta = (
+    <p className="student-filter-summary">
+      Range: {filters.range.toUpperCase()} | Type: {toTitleCase(filters.type)} | Severity:{" "}
+      {toTitleCase(filters.severity)}
+    </p>
+  );
+
+  if (loading && !hasAnyData) {
     return <StudentLoadingState message="Loading personal alerts..." />;
   }
 
-  if (error) {
-    return <StudentErrorState message={error} onRetry={loadAlerts} />;
+  if (fatalError && !hasAnyData) {
+    return <StudentErrorState message={fatalError} onRetry={() => setRefreshTick((value) => value + 1)} />;
   }
-
-  const criticalCount = filteredAlerts.filter((alert) => alert.severity === "Critical").length;
 
   return (
     <div className="student-page">
-      <StudentPageHeader title="Personal Alerts" description={STUDENT_PAGE_DESCRIPTIONS.alerts} />
+      <StudentPageHeader
+        title="Personal Alerts"
+        description="Track your alert severity, filter incident types, and review details that need attention first."
+        roomId={roomId}
+        lastUpdated={lastUpdated}
+        rightSlot={rightMeta}
+      />
+
+      <StudentAlertsFilterBar
+        filters={filters}
+        loading={loading}
+        typeOptions={typeOptions}
+        onChange={(next) => setFilters((prev) => ({ ...prev, ...next }))}
+        onRefresh={() => setRefreshTick((value) => value + 1)}
+      />
 
       <div className="student-kpi-grid">
-        <StudentKpiCard title="Total Alerts" value={alerts.length} subtitle="Loaded from student alert API" />
-        <StudentKpiCard title="Visible Alerts" value={filteredAlerts.length} subtitle="After current filters" />
-        <StudentKpiCard title="Critical Alerts" value={criticalCount} subtitle="Current filtered set" />
-        <StudentKpiCard title="Room Context" value={DEFAULT_STUDENT_ROOM_ID} subtitle="Temporary demo room config" />
+        <StudentKpiCard
+          title="Total Alerts"
+          value={effectiveSummary.total ?? 0}
+          subtitle={summarySourceText}
+        />
+        <StudentKpiCard
+          title="Active Alerts"
+          value={effectiveSummary.active ?? 0}
+          subtitle="Open alerts requiring review"
+        />
+        <StudentKpiCard
+          title="Critical Alerts"
+          value={effectiveSummary.critical ?? 0}
+          subtitle={summarySourceText}
+        />
+        <StudentKpiCard
+          title="Warning Alerts"
+          value={effectiveSummary.warning ?? 0}
+          subtitle={summarySourceText}
+        />
       </div>
 
-      <div className="student-section-grid">
+      <div className="student-alerts-top-grid">
         <StudentSectionCard
-          title="Alert Filters"
-          description="Basic filter-ready structure; advanced controls can be expanded in later phases."
+          title="Alert Type Breakdown"
+          description="Distribution of alerts by type for the selected filters."
         >
-          <div className="student-filter-row">
-            <label>
-              Alert Type
-              <select
-                value={filters.alertType}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, alertType: event.target.value }))
-                }
-              >
-                <option value="all">All</option>
-                <option value="energy">Energy</option>
-                <option value="noise">Noise</option>
-                <option value="general">General</option>
-              </select>
-            </label>
+          {breakdownItems.length ? (
+            <>
+              <div className="student-chart-wrap">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={breakdownChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="type" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip formatter={(value) => [Number(value), "Alerts"]} />
+                    <Bar dataKey="count" fill="#6366f1" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
 
-            <label>
-              Severity
-              <select
-                value={filters.severity}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, severity: event.target.value }))
-                }
-              >
-                <option value="all">All</option>
-                <option value="Critical">Critical</option>
-                <option value="Warning">Warning</option>
-                <option value="Info">Info</option>
-              </select>
-            </label>
-          </div>
-        </StudentSectionCard>
-
-        <StudentSectionCard title="Alerts List" description="Clean base list component for future table/card upgrades.">
-          {filteredAlerts.length ? (
-            <div className="student-alert-list">
-              {filteredAlerts.map((alert) => (
-                <article key={alert.id} className={`student-alert-item ${alert.severity.toLowerCase()}`}>
-                  <div className="student-alert-top">
-                    <strong>{alert.type.toUpperCase()}</strong>
-                    <span>{alert.severity}</span>
+              <div className="student-alert-breakdown-list">
+                {breakdownItems.map((item) => (
+                  <div key={item.type} className="student-alert-breakdown-item">
+                    <span>{formatAlertTypeLabel(item.type)}</span>
+                    <strong>
+                      {item.count} ({formatAlertPercentage(item.count, effectiveSummary.total)})
+                    </strong>
                   </div>
-                  <p>{alert.message}</p>
-                  <small>{alert.timestamp || "Unknown time"}</small>
-                </article>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           ) : (
-            <StudentEmptyState title="No alerts match filters" message="Try broadening the selected filter options." />
+            <StudentEmptyState
+              title="No type breakdown available"
+              message={
+                partialErrors.summary || "No type-level alert distribution was returned for the selected filters."
+              }
+            />
           )}
         </StudentSectionCard>
 
         <StudentSectionCard
-          title="Follow-up Placeholder"
-          description="Reserved for acknowledgement workflows and alert lifecycle actions."
+          title="Priority Guidance"
+          description="Quick triage suggestions based on current alert severity and type distribution."
         >
-          <p>Alert acknowledgement and escalation actions are intentionally deferred to Phase 2+.</p>
+          <p className="student-alert-guidance-title">{priorityGuidance.title}</p>
+          <p className="student-muted-text">{priorityGuidance.message}</p>
+          <p className="student-muted-text">
+            Critical share: {formatAlertPercentage(effectiveSummary.critical, effectiveSummary.total)} | Warning
+            share: {formatAlertPercentage(effectiveSummary.warning, effectiveSummary.total)}
+          </p>
+        </StudentSectionCard>
+      </div>
+
+      <div className="student-alerts-main-grid">
+        <StudentSectionCard
+          title="Alert List"
+          description="Recent alerts are shown first. Select any item to inspect details."
+        >
+          {partialErrors.list ? (
+            <StudentErrorState
+              message={partialErrors.list}
+              onRetry={() => setRefreshTick((value) => value + 1)}
+            />
+          ) : (
+            <StudentAlertsList
+              alerts={alerts}
+              selectedAlertId={selectedAlert?.id}
+              onSelect={(alert) => setSelectedAlertId(alert.id)}
+            />
+          )}
+        </StudentSectionCard>
+
+        <StudentSectionCard
+          title="Alert Details"
+          description="Lightweight detail panel for the currently selected alert."
+        >
+          {partialErrors.list && !alerts.length ? (
+            <StudentEmptyState
+              title="Details unavailable"
+              message="Alert details will appear once the alert list is available."
+            />
+          ) : (
+            <StudentAlertDetailCard alert={selectedAlert} />
+          )}
         </StudentSectionCard>
       </div>
     </div>
   );
 }
-
