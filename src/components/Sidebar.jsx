@@ -11,6 +11,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">Smart Hostel</div>
+
       <nav className="nav-list">
         {items.map((item) => (
           <NavLink

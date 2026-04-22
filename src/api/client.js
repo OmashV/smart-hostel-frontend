@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL
 });
 
@@ -66,20 +66,5 @@ export async function getSecuritySuspiciousRooms() {
 
 export async function getSecurityDoorEvents(limit = 50) {
   const { data } = await api.get(`/rooms/security/door-events?limit=${limit}`);
-  return data;
-}
-
-export async function getStudentOverview(roomId = "A101") {
-  const { data } = await api.get(`/rooms/student/${roomId}/overview`);
-  return data;
-}
-
-export async function getStudentHistory(roomId = "A101") {
-  const { data } = await api.get(`/rooms/student/${roomId}/energy/history`);
-  return data;
-}
-
-export async function getStudentAlerts(roomId = "A101", limit = 20) {
-  const { data } = await api.get(`/rooms/student/${roomId}/alerts?limit=${limit}`);
   return data;
 }
