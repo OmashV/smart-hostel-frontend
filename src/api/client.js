@@ -83,6 +83,15 @@ export async function getWardenNoiseTrend(days = 7) {
   const { data } = await api.get(`/rooms/warden/noise-trend?days=${days}`);
   return data;
 }
+export async function getWardenHistory(days = 7, roomId = "All") {
+  const query =
+    roomId && roomId !== "All"
+      ? `/rooms/warden/history?days=${days}&roomId=${roomId}`
+      : `/rooms/warden/history?days=${days}`;
+
+  const { data } = await api.get(query);
+  return data;
+}
 
 export async function getSecuritySummary() {
   const { data } = await api.get(`/rooms/security/summary`);
