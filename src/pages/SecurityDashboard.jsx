@@ -164,12 +164,15 @@ export default function SecurityDashboard() {
 
   // ── Chart data ──────────────────────────────────────────────────────────────
   const trendData = trend.map((item) => ({
-    hour:     item.hour_label,
-    expected: item.expected_door_stable_min,
-    actual:   item.actual_door_stable_min,
-    upper:    item.upper_bound_ms != null ? +(item.upper_bound_ms / 60000).toFixed(2) : null,
-    lower:    item.lower_bound_ms != null ? +(item.lower_bound_ms / 60000).toFixed(2) : null
-  }));
+  hour:     item.hour_label,
+  expected: item.expected_door_stable_min,
+  actual:   item.actual_door_stable_min,   // null for future hours — recharts shows gap
+  upper:    item.upper_bound_ms != null ? +(item.upper_bound_ms / 60000).toFixed(2) : null,
+  lower:    item.lower_bound_ms != null ? +(item.lower_bound_ms / 60000).toFixed(2) : null,
+  // Pass through for tooltip
+  latest_captured_at: item.latest_captured_at,
+  trend_status:       item.trend_status
+}));
 
   const renderRoomLink = (row) => (
     <button
