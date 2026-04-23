@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -92,6 +94,20 @@ function AlertCard({ alert, onResolve, onDelete }) {
       </div>
     </div>
   );
+}
+
+function deriveFloorIdFromRoom(roomId = "") {
+  const clean = String(roomId).trim().toUpperCase();
+
+  if (/^[A-Z]1\d{2}$/.test(clean)) {
+    return `${clean[0]}-Floor-1`;
+  }
+
+  if (/^[A-Z]2\d{2}$/.test(clean)) {
+    return `${clean[0]}-Floor-2`;
+  }
+
+  return "Unknown Floor";
 }
 
 function OwnerRoomTile({ room }) {
@@ -588,6 +604,67 @@ export default function OwnerDashboard() {
     return "Normal";
   }, [kpis, resolvedWasteRatio]);
 
+  const overviewComparison = useMemo(() => {
+    if (roomId !== "all") {
+      return {
+        title: "Room Overview",
+        mode: "single-room",
+        data: []
+      };
+    }
+
+    const normalizedRooms = (roomsOverview || []).map((room) => ({
+      ...room,
+      floor_id: room.floor_id || deriveFloorIdFromRoom(room.room_id),
+      total_energy_kwh: Number(room.total_energy_kwh || 0),
+      wasted_energy_kwh: Number(room.wasted_energy_kwh || 0)
+    }));
+
+    if (floorId === "all") {
+      const grouped = normalizedRooms.reduce((acc, room) => {
+        const key = room.floor_id || "Unknown Floor";
+
+        if (!acc[key]) {
+          acc[key] = {
+            key,
+            name: key,
+            total_energy_kwh: 0,
+            wasted_energy_kwh: 0,
+            room_count: 0
+          };
+        }
+
+        acc[key].total_energy_kwh += room.total_energy_kwh;
+        acc[key].wasted_energy_kwh += room.wasted_energy_kwh;
+        acc[key].room_count += 1;
+
+        return acc;
+      }, {});
+
+      return {
+        title: "Floor-wise Energy Comparison",
+        mode: "floor",
+        data: Object.values(grouped)
+      };
+    }
+
+    const filteredRooms = normalizedRooms.filter(
+      (room) => room.floor_id === floorId
+    );
+
+    return {
+      title: `${floorId} Room-wise Energy Comparison`,
+      mode: "room",
+      data: filteredRooms.map((room) => ({
+        key: room.room_id,
+        name: room.room_id,
+        total_energy_kwh: room.total_energy_kwh,
+        wasted_energy_kwh: room.wasted_energy_kwh,
+        waste_ratio_percent: Number(room.waste_ratio_percent || 0)
+      }))
+    };
+  }, [roomsOverview, floorId, roomId]);
+
   const handleResolveAlert = async (alertId) => {
     try {
       await resolveOwnerAlert(alertId);
@@ -604,6 +681,21 @@ export default function OwnerDashboard() {
     } catch (error) {
       console.error("Delete alert failed:", error);
     }
+  };
+
+  const handleOverviewChartClick = (state) => {
+    const payload = state?.activePayload?.[0]?.payload;
+    if (!payload) return;
+
+    if (roomId !== "all") return;
+
+    if (floorId === "all") {
+      setFloorId(payload.key);
+      setRoomId("all");
+      return;
+    }
+
+    setRoomId(payload.key);
   };
 
   if (loading) return <LoadingState />;
@@ -656,11 +748,92 @@ export default function OwnerDashboard() {
       {roomId === "all" ? (
         <div className="owner-top-grid">
           <SectionCard title="Room Overview">
-            <div className="owner-room-grid">
-              {roomsOverview.map((room) => (
-                <OwnerRoomTile key={room.room_id} room={room} />
-              ))}
-            </div>
+            {overviewComparison.data.length ? (
+              <>
+                <div
+                  style={{
+                    marginBottom: "10px",
+                    color: "#64748b",
+                    fontSize: "14px"
+                  }}
+                >
+                  {floorId === "all"
+                    ? "Comparing total energy and wasted energy across floors. Click a bar to drill into a floor."
+                    : "Comparing total energy and wasted energy across rooms in the selected floor. Click a bar to drill into a room."}
+                </div>
+
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart
+                    data={overviewComparison.data}
+                    onClick={handleOverviewChartClick}
+                    margin={{ top: 12, right: 18, left: 0, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "#64748b", fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#ffffff",
+                        border: "1px solid #dbe2ea",
+                        borderRadius: "12px",
+                        color: "#172033",
+                        boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
+                      }}
+                      formatter={(value, name) => [
+                        `${Number(value || 0).toFixed(2)} kWh`,
+                        name === "total_energy_kwh"
+                          ? "Total Energy"
+                          : "Wasted Energy"
+                      ]}
+                    />
+                    <Legend
+                      formatter={(value) =>
+                        value === "total_energy_kwh"
+                          ? "Total Energy"
+                          : "Wasted Energy"
+                      }
+                    />
+                    <Bar
+                      dataKey="total_energy_kwh"
+                      name="total_energy_kwh"
+                      fill="#3b82f6"
+                      radius={[8, 8, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="wasted_energy_kwh"
+                      name="wasted_energy_kwh"
+                      fill="#f59e0b"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+
+                {roomId === "all" && roomsOverview.length > 0 && (
+                  <div style={{ marginTop: "18px" }} className="owner-room-grid">
+                    {roomsOverview.map((room) => (
+                      <OwnerRoomTile key={room.room_id} room={room} />
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : roomId === "all" && roomsOverview.length > 0 ? (
+              <div className="owner-room-grid">
+                {roomsOverview.map((room) => (
+                  <OwnerRoomTile key={room.room_id} room={room} />
+                ))}
+              </div>
+            ) : (
+              <p>No overview data available.</p>
+            )}
           </SectionCard>
 
           <SectionCard title="Active Alerts">
