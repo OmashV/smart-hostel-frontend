@@ -813,6 +813,18 @@ export default function WardenDashboard() {
       .slice()
       .sort((a, b) => Number(b.importance || 0) - Number(a.importance || 0));
   }, [wardenFeatureImportance, selectedRoomFilter]);
+  const structuredPatternRows = useMemo(() => {
+  if (selectedRoomFilter === "All") return [];
+
+  return filteredPatterns.map((item, idx) => ({
+    id: `${item.date || item.weekday_name || idx}-${idx}`,
+    date: item.date || item.sample_date || item.reference_date || "-",
+    day: item.weekday_name || item.day || "-",
+    type: item.day_type || "Monitoring",
+    pattern: item.usual_pattern || item.pattern_name || "Pattern detected",
+    frequency: Number(item.count || item.frequency || 0)
+  }));
+}, [filteredPatterns, selectedRoomFilter]);
 
   const roomForecastChartData = useMemo(() => {
     if (selectedRoomFilter === "All") return [];
@@ -963,29 +975,7 @@ export default function WardenDashboard() {
             </SectionCard>
 
             <SectionCard title="Active Alerts" className="primary-section">
-              <div className="warden-alert-summary-grid">
-                <AlertSummaryTile
-                  title="Critical Waste"
-                  count={alertSummary.criticalWaste}
-                  tone={alertSummary.criticalWaste > 0 ? "danger" : "ok"}
-                  subtitle={
-                    alertSummary.criticalWaste > 0
-                      ? "Energy waste detected above critical level"
-                      : "No critical waste currently"
-                  }
-                />
-                <AlertSummaryTile
-                  title="Critical Noise"
-                  count={alertSummary.criticalNoise}
-                  tone={alertSummary.criticalNoise > 0 ? "danger" : "ok"}
-                  subtitle={
-                    alertSummary.criticalNoise > 0
-                      ? "Noise threshold exceeded in active rooms"
-                      : "No critical noise currently"
-                  }
-                />
-              </div>
-
+              
               {activeAlerts.length ? (
                 <div className="alerts-list">
                   {activeAlerts.map((alert, index) => (
@@ -1278,193 +1268,163 @@ export default function WardenDashboard() {
             <div className="warden-analysis-stack">
               <SectionCard title="Historical and Forecasted Room Trend">
                 {roomForecastChartData.length ? (
-                  <div className="chart-shell owner-chart-shell">
-                    <ResponsiveContainer width="100%" height={380}>
-                      <ComposedChart data={roomForecastChartData}>
-                        <defs>
-                          <linearGradient id="wardenActualOccFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#2563eb" stopOpacity={0.28} />
-                            <stop offset="95%" stopColor="#2563eb" stopOpacity={0.04} />
-                          </linearGradient>
-                          <linearGradient id="wardenActualWarnFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.22} />
-                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.04} />
-                          </linearGradient>
-                        </defs>
+  <ResponsiveContainer width="100%" height={360}>
+    <ComposedChart data={roomForecastChartData}>
+      <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
+      <XAxis
+        dataKey="date"
+        tick={{ fill: "#64748b", fontSize: 12 }}
+        tickLine={false}
+        axisLine={{ stroke: "#e2e8f0" }}
+      />
+      <YAxis
+        tick={{ fill: "#64748b", fontSize: 12 }}
+        tickLine={false}
+        axisLine={{ stroke: "#e2e8f0" }}
+      />
+      <Tooltip contentStyle={chartTooltipStyle} />
+      {forecastSplitDate ? (
+        <ReferenceLine
+          x={forecastSplitDate}
+          stroke="#94a3b8"
+          strokeDasharray="4 4"
+          ifOverflow="visible"
+          label={{
+            value: "forecast",
+            position: "insideTopLeft",
+            fill: "#0f172a",
+            fontSize: 13
+          }}
+        />
+      ) : null}
+      <Legend content={renderForecastLegend} />
 
-                        <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fill: "#64748b", fontSize: 12 }}
-                          tickLine={false}
-                          axisLine={{ stroke: "#e2e8f0" }}
-                        />
-                        <YAxis
-                          tick={{ fill: "#64748b", fontSize: 12 }}
-                          tickLine={false}
-                          axisLine={{ stroke: "#e2e8f0" }}
-                        />
-                        <Tooltip contentStyle={chartTooltipStyle} />
-                        {forecastSplitDate ? (
-                          <ReferenceLine
-                            x={toShortLabel(forecastSplitDate)}
-                            stroke="#94a3b8"
-                            strokeDasharray="4 4"
-                            ifOverflow="visible"
-                            label={{
-                              value: "forecast",
-                              position: "insideTopLeft",
-                              fill: "#0f172a",
-                              fontSize: 13
-                            }}
-                          />
-                        ) : null}
-                        <Legend content={renderForecastLegend} />
-
-                        <Area
-                          type="monotone"
-                          dataKey="occupied_count"
-                          name="Actual Occupancy"
-                          stroke="#2563eb"
-                          fill="url(#wardenActualOccFill)"
-                          strokeWidth={2.8}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="warning_count"
-                          name="Actual Warnings"
-                          stroke="#f59e0b"
-                          fill="url(#wardenActualWarnFill)"
-                          strokeWidth={2.2}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="violation_count"
-                          name="Actual Violations"
-                          stroke="#ef4444"
-                          strokeWidth={2.4}
-                          dot={false}
-                          connectNulls
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="predicted_occupied_count"
-                          name="Predicted Occupancy"
-                          stroke="#2563eb"
-                          strokeWidth={2.8}
-                          strokeDasharray="10 6"
-                          dot={false}
-                          connectNulls
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="predicted_warning_count"
-                          name="Predicted Warnings"
-                          stroke="#f59e0b"
-                          strokeWidth={2.4}
-                          strokeDasharray="10 6"
-                          dot={false}
-                          connectNulls
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="predicted_violation_count"
-                          name="Predicted Violations"
-                          stroke="#ef4444"
-                          strokeWidth={2.4}
-                          strokeDasharray="10 6"
-                          dot={false}
-                          connectNulls
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <EmptyState text="No room-level forecast data available." />
-                )}
+      <Line
+        type="monotone"
+        dataKey="occupied_count"
+        name="Actual Occupancy"
+        stroke="#2563eb"
+        strokeWidth={2.6}
+        dot={false}
+        connectNulls
+        legendType="plainline"
+      />
+      <Line
+        type="monotone"
+        dataKey="warning_count"
+        name="Actual Warnings"
+        stroke="#f59e0b"
+        strokeWidth={2.2}
+        dot={false}
+        connectNulls
+        legendType="plainline"
+      />
+      <Line
+        type="monotone"
+        dataKey="predicted_occupied_count"
+        name="Predicted Occupancy"
+        stroke="#2563eb"
+        strokeWidth={2.6}
+        strokeDasharray="10 6"
+        dot={false}
+        connectNulls
+        legendType="plainline"
+      />
+      <Line
+        type="monotone"
+        dataKey="predicted_warning_count"
+        name="Predicted Warnings"
+        stroke="#f59e0b"
+        strokeWidth={2.2}
+        strokeDasharray="10 6"
+        dot={false}
+        connectNulls
+        legendType="plainline"
+      />
+    </ComposedChart>
+  </ResponsiveContainer>
+) : (
+  <EmptyState text="No room-level forecast data available." />
+)}
               </SectionCard>
 
               <SectionCard title="Abnormal Noise / Action Days">
-                {filteredAnomalies.length ? (
-                  <div className="table-wrap nice-table-wrap">
-                    <table className="data-table enhanced-data-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Score</th>
-                          <th>Status</th>
-                          <th>Reason</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredAnomalies.map((item, idx) => (
-                          <tr key={`${item.date}-${idx}`}>
-                            <td>{item.date}</td>
-                            <td>
-                              <span className="score-pill score-danger">
-                                {Number(item.anomaly_score || 0).toFixed(3)}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="badge danger">Abnormal</span>
-                            </td>
-                            <td>
-                              <span className={`history-word ${historyTone(item.reason || "critical")}`}>
-                                {item.reason || "Unusual room behavior detected"}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <EmptyState text="No abnormal room days detected yet." />
-                )}
-              </SectionCard>
+  {filteredAnomalies.length ? (
+    <div className="table-wrap nice-table-wrap">
+      <table className="data-table enhanced-data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Anomaly Score</th>
+            <th>Status</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredAnomalies.map((item, idx) => (
+            <tr key={`${item.date}-${idx}`}>
+              <td>{item.date || "-"}</td>
+              <td>
+                <span className="score-pill score-danger">
+                  {Number(item.anomaly_score || 0).toFixed(3)}
+                </span>
+              </td>
+              <td>
+                <span className="badge danger">Abnormal</span>
+              </td>
+              <td>
+                <span className={`history-word ${historyTone(item.reason || "critical")}`}>
+                  {item.reason || "Unusual room behavior detected"}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <EmptyState text="No abnormal room days detected yet." />
+  )}
+</SectionCard>
 
               <SectionCard title="Weekly Pattern Discovery">
-                {filteredPatterns.length ? (
-                  <div className="table-wrap nice-table-wrap">
-                    <table className="data-table enhanced-data-table">
-                      <thead>
-                        <tr>
-                          <th>Day / Pattern</th>
-                          <th>Type</th>
-                          <th>Usual Pattern</th>
-                          <th>Frequency</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredPatterns.map((item, idx) => {
-                          const patternText =
-                            item.usual_pattern || item.pattern_name || item.weekday_name || "Pattern";
-                          const frequency = Number(item.count || item.frequency || 0);
-
-                          return (
-                            <tr key={`${patternText}-${idx}`}>
-                              <td>{item.weekday_name || item.day || "-"}</td>
-                              <td>
-                                <span className="badge ok">{item.day_type || "Monitoring"}</span>
-                              </td>
-                              <td>
-                                <span className={`history-word ${historyTone(patternText)}`}>
-                                  {patternText}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="score-pill score-indigo">{frequency}</span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <EmptyState text="No weekday pattern discovery available yet." />
-                )}
-              </SectionCard>
+  {structuredPatternRows.length ? (
+    <div className="table-wrap nice-table-wrap">
+      <table className="data-table enhanced-data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Day</th>
+            <th>Type</th>
+            <th>Usual Pattern</th>
+            <th>Frequency</th>
+          </tr>
+        </thead>
+        <tbody>
+          {structuredPatternRows.map((item) => (
+            <tr key={item.id}>
+              <td>{item.date}</td>
+              <td>{item.day}</td>
+              <td>
+                <span className="badge ok">{item.type}</span>
+              </td>
+              <td>
+                <span className={`history-word ${historyTone(item.pattern)}`}>
+                  {item.pattern}
+                </span>
+              </td>
+              <td>
+                <span className="score-pill score-indigo">{item.frequency}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <EmptyState text="No weekday pattern discovery available yet." />
+  )}
+</SectionCard>
 
               <SectionCard title="Correlation / Feature Importance">
                 {filteredFeatureImportance.length ? (
