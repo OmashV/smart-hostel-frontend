@@ -1914,3 +1914,28 @@ body {
     flex-direction: column;
   }
 }
+.owner-forecast-chart-shell {
+  background: linear-gradient(180deg, #fafcff 0%, #ffffff 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 8px 10px 0;
+}
+
+.full-balance-table table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.full-balance-table th,
+.full-balance-table td {
+  vertical-align: middle;
+}
+
+.reason-cell {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.enhanced-data-table td .history-word {
+  max-width: 100%;
+}

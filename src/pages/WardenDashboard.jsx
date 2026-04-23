@@ -813,16 +813,48 @@ export default function WardenDashboard() {
       .slice()
       .sort((a, b) => Number(b.importance || 0) - Number(a.importance || 0));
   }, [wardenFeatureImportance, selectedRoomFilter]);
-  const structuredPatternRows = useMemo(() => {
+ const structuredPatternRows = useMemo(() => {
   if (selectedRoomFilter === "All") return [];
 
-  return filteredPatterns.map((item, idx) => ({
-    id: `${item.date || item.weekday_name || idx}-${idx}`,
-    date: item.date || item.sample_date || item.reference_date || "-",
-    day: item.weekday_name || item.day || "-",
-    type: item.day_type || "Monitoring",
-    pattern: item.usual_pattern || item.pattern_name || "Pattern detected",
-    frequency: Number(item.count || item.frequency || 0)
+  const orderedDays = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday"
+  ];
+
+  const byDay = new Map();
+
+  filteredPatterns.forEach((item) => {
+    const dayName =
+      item.weekday_name ||
+      item.day ||
+      new Date(item.date || item.sample_date || item.reference_date || "").toLocaleDateString(
+        "en-US",
+        { weekday: "long" }
+      );
+
+    if (dayName) {
+      byDay.set(dayName, {
+        day: dayName,
+        type: item.day_type || (dayName === "Saturday" || dayName === "Sunday" ? "Weekend" : "Weekday"),
+        pattern: item.usual_pattern || item.pattern_name || "Pattern detected",
+        frequency: Number(item.count || item.frequency || 0)
+      });
+    }
+  });
+
+  return orderedDays.map((day, index) => ({
+    id: `${day}-${index}`,
+    day,
+    type:
+      byDay.get(day)?.type ||
+      (day === "Saturday" || day === "Sunday" ? "Weekend" : "Weekday"),
+    pattern: byDay.get(day)?.pattern || "No data",
+    frequency: byDay.get(day)?.frequency || 0
   }));
 }, [filteredPatterns, selectedRoomFilter]);
 
@@ -1267,91 +1299,103 @@ export default function WardenDashboard() {
           <SectionCard title={`Data Analysis & Insights - ${selectedRoomFilter}`}>
             <div className="warden-analysis-stack">
               <SectionCard title="Historical and Forecasted Room Trend">
-                {roomForecastChartData.length ? (
-  <ResponsiveContainer width="100%" height={360}>
-    <ComposedChart data={roomForecastChartData}>
-      <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
-      <XAxis
-        dataKey="date"
-        tick={{ fill: "#64748b", fontSize: 12 }}
-        tickLine={false}
-        axisLine={{ stroke: "#e2e8f0" }}
-      />
-      <YAxis
-        tick={{ fill: "#64748b", fontSize: 12 }}
-        tickLine={false}
-        axisLine={{ stroke: "#e2e8f0" }}
-      />
-      <Tooltip contentStyle={chartTooltipStyle} />
-      {forecastSplitDate ? (
-        <ReferenceLine
-          x={forecastSplitDate}
-          stroke="#94a3b8"
-          strokeDasharray="4 4"
-          ifOverflow="visible"
-          label={{
-            value: "forecast",
-            position: "insideTopLeft",
-            fill: "#0f172a",
-            fontSize: 13
-          }}
-        />
-      ) : null}
-      <Legend content={renderForecastLegend} />
+  {roomForecastChartData.length ? (
+    <div className="chart-shell owner-forecast-chart-shell">
+      <ResponsiveContainer width="100%" height={360}>
+        <ComposedChart data={roomForecastChartData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
+          <XAxis
+            dataKey="date"
+            tick={{ fill: "#64748b", fontSize: 11 }}
+            tickLine={false}
+            axisLine={{ stroke: "#e2e8f0" }}
+            minTickGap={24}
+          />
+          <YAxis
+            tick={{ fill: "#64748b", fontSize: 11 }}
+            tickLine={false}
+            axisLine={{ stroke: "#e2e8f0" }}
+            domain={[0, "dataMax + 2"]}
+          />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          {forecastSplitDate ? (
+            <ReferenceLine
+              x={forecastSplitDate}
+              stroke="#94a3b8"
+              strokeDasharray="4 4"
+              ifOverflow="visible"
+              label={{
+                value: "forecast",
+                position: "insideTopLeft",
+                fill: "#0f172a",
+                fontSize: 12
+              }}
+            />
+          ) : null}
+          <Legend content={renderForecastLegend} />
 
-      <Line
-        type="monotone"
-        dataKey="occupied_count"
-        name="Actual Occupancy"
-        stroke="#2563eb"
-        strokeWidth={2.6}
-        dot={false}
-        connectNulls
-        legendType="plainline"
-      />
-      <Line
-        type="monotone"
-        dataKey="warning_count"
-        name="Actual Warnings"
-        stroke="#f59e0b"
-        strokeWidth={2.2}
-        dot={false}
-        connectNulls
-        legendType="plainline"
-      />
-      <Line
-        type="monotone"
-        dataKey="predicted_occupied_count"
-        name="Predicted Occupancy"
-        stroke="#2563eb"
-        strokeWidth={2.6}
-        strokeDasharray="10 6"
-        dot={false}
-        connectNulls
-        legendType="plainline"
-      />
-      <Line
-        type="monotone"
-        dataKey="predicted_warning_count"
-        name="Predicted Warnings"
-        stroke="#f59e0b"
-        strokeWidth={2.2}
-        strokeDasharray="10 6"
-        dot={false}
-        connectNulls
-        legendType="plainline"
-      />
-    </ComposedChart>
-  </ResponsiveContainer>
-) : (
-  <EmptyState text="No room-level forecast data available." />
-)}
-              </SectionCard>
+          <Line
+            type="monotone"
+            dataKey="occupied_count"
+            name="Actual Occupancy"
+            stroke="#2563eb"
+            strokeWidth={2.4}
+            dot={{ r: 2, strokeWidth: 0, fill: "#2563eb" }}
+            activeDot={{ r: 4 }}
+            connectNulls
+            legendType="plainline"
+          />
+          <Line
+            type="monotone"
+            dataKey="warning_count"
+            name="Actual Warnings"
+            stroke="#f59e0b"
+            strokeWidth={2.1}
+            dot={{ r: 2, strokeWidth: 0, fill: "#f59e0b" }}
+            activeDot={{ r: 4 }}
+            connectNulls
+            legendType="plainline"
+          />
+          <Line
+            type="monotone"
+            dataKey="predicted_occupied_count"
+            name="Predicted Occupancy"
+            stroke="#2563eb"
+            strokeWidth={2.4}
+            strokeDasharray="7 5"
+            dot={false}
+            connectNulls
+            legendType="plainline"
+          />
+          <Line
+            type="monotone"
+            dataKey="predicted_warning_count"
+            name="Predicted Warnings"
+            stroke="#f59e0b"
+            strokeWidth={2.1}
+            strokeDasharray="7 5"
+            dot={false}
+            connectNulls
+            legendType="plainline"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  ) : (
+    <EmptyState text="No room-level forecast data available." />
+  )}
+</SectionCard>
 
               <SectionCard title="Abnormal Noise / Action Days">
   {filteredAnomalies.length ? (
-    <div className="table-wrap nice-table-wrap">
+    <div className="table-wrap nice-table-wrap full-balance-table">
       <table className="data-table enhanced-data-table">
+        <colgroup>
+          <col style={{ width: "18%" }} />
+          <col style={{ width: "18%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "48%" }} />
+        </colgroup>
         <thead>
           <tr>
             <th>Date</th>
@@ -1372,7 +1416,7 @@ export default function WardenDashboard() {
               <td>
                 <span className="badge danger">Abnormal</span>
               </td>
-              <td>
+              <td className="reason-cell">
                 <span className={`history-word ${historyTone(item.reason || "critical")}`}>
                   {item.reason || "Unusual room behavior detected"}
                 </span>
@@ -1389,11 +1433,16 @@ export default function WardenDashboard() {
 
               <SectionCard title="Weekly Pattern Discovery">
   {structuredPatternRows.length ? (
-    <div className="table-wrap nice-table-wrap">
+    <div className="table-wrap nice-table-wrap full-balance-table">
       <table className="data-table enhanced-data-table">
+        <colgroup>
+          <col style={{ width: "22%" }} />
+          <col style={{ width: "18%" }} />
+          <col style={{ width: "40%" }} />
+          <col style={{ width: "20%" }} />
+        </colgroup>
         <thead>
           <tr>
-            <th>Date</th>
             <th>Day</th>
             <th>Type</th>
             <th>Usual Pattern</th>
@@ -1403,7 +1452,6 @@ export default function WardenDashboard() {
         <tbody>
           {structuredPatternRows.map((item) => (
             <tr key={item.id}>
-              <td>{item.date}</td>
               <td>{item.day}</td>
               <td>
                 <span className="badge ok">{item.type}</span>
@@ -1425,7 +1473,6 @@ export default function WardenDashboard() {
     <EmptyState text="No weekday pattern discovery available yet." />
   )}
 </SectionCard>
-
               <SectionCard title="Correlation / Feature Importance">
                 {filteredFeatureImportance.length ? (
                   <ResponsiveContainer width="100%" height={320}>
