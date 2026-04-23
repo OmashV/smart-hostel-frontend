@@ -19,8 +19,9 @@ import {
 } from "react-icons/hi2";
 
 import {
+  getAvailableFloors,
+  getAvailableRooms,
   getEnergyForecast,
-  getEnergyHistory,
   getOwnerAlerts,
   resolveOwnerAlert,
   deleteOwnerAlert,
@@ -28,7 +29,8 @@ import {
   getOwnerWeekdayPatterns,
   getOwnerKpis,
   getOwnerPatterns,
-  getOwnerRoomsOverview
+  getOwnerRoomsOverview,
+  getTopWasteDays
 } from "../api/client";
 import { mergeHistoryWithForecast } from "../utils/chart";
 import { formatDate, formatKwh } from "../utils/format";
@@ -159,6 +161,7 @@ function OwnerRoomTile({ room }) {
 }
 
 export default function OwnerDashboard() {
+  const [floorId, setFloorId] = useState("all");
   const [roomId, setRoomId] = useState(() => {
     try {
       return localStorage.getItem("smart-hostel.owner.roomId") || "all";
@@ -175,6 +178,8 @@ export default function OwnerDashboard() {
     }
   });
   const [loading, setLoading] = useState(true);
+  const [availableFloors, setAvailableFloors] = useState([]);
+  const [availableRooms, setAvailableRooms] = useState([]);
 
   const [kpis, setKpis] = useState(null);
   const [roomsOverview, setRoomsOverview] = useState([]);
@@ -182,6 +187,7 @@ export default function OwnerDashboard() {
 
   const [history, setHistory] = useState([]);
   const [forecast, setForecast] = useState([]);
+  const [topWasteDays, setTopWasteDays] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
   const [patterns, setPatterns] = useState([]);
   const [weekdayPatterns, setWeekdayPatterns] = useState([]);
@@ -209,13 +215,47 @@ export default function OwnerDashboard() {
   }, [forecastDays]);
 
   useEffect(() => {
+    async function loadFloors() {
+      try {
+        const res = await getAvailableFloors();
+        setAvailableFloors(res.floors || []);
+      } catch (error) {
+        console.error("Failed to load floors:", error);
+        setAvailableFloors([]);
+      }
+    }
+
+    loadFloors();
+  }, []);
+
+  useEffect(() => {
+    async function loadRooms() {
+      try {
+        const res = await getAvailableRooms(floorId);
+        const rooms = res.rooms || [];
+        setAvailableRooms(rooms);
+
+        setRoomId((currentRoomId) =>
+          currentRoomId !== "all" && !rooms.includes(currentRoomId)
+            ? "all"
+            : currentRoomId
+        );
+      } catch (error) {
+        console.error("Failed to load rooms:", error);
+        setAvailableRooms([]);
+      }
+    }
+
+    loadRooms();
+  }, [floorId]);
+
+  useEffect(() => {
     let liveInterval;
-    let analyticsInterval;
 
     async function loadAllRoomsView() {
       try {
         const [overviewRes, alertsRes] = await Promise.all([
-          getOwnerRoomsOverview(),
+          getOwnerRoomsOverview(floorId),
           getOwnerAlerts().catch(() => ({ alerts: [] }))
         ]);
     
@@ -256,61 +296,56 @@ export default function OwnerDashboard() {
 
     async function loadSingleRoomLive() {
       try {
-        const [kpiRes, historyRes] = await Promise.all([
+        const [
+          kpiRes,
+          forecastRes,
+          topWasteRes,
+          anomalyRes,
+          patternRes,
+          weekdayRes
+        ] = await Promise.all([
           getOwnerKpis(roomId),
-          getEnergyHistory(roomId)
-        ]);
-
-        setKpis(kpiRes);
-        setHistory(historyRes.history || []);
-        setRoomsOverview([]);
-        setAlerts([]);
-      } catch (error) {
-        console.error("Single room live refresh failed:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    async function loadSingleRoomAnalytics() {
-      try {
-        const [forecastRes, anomalyRes, patternRes, weekdayRes] = await Promise.all([
           getEnergyForecast(roomId, forecastDays).catch(() => ({
             history: [],
             forecast: []
           })),
+          getTopWasteDays(roomId, 31).catch(() => ({ days: [] })),
           getOwnerAnomalies(roomId).catch(() => ({ items: [] })),
           getOwnerPatterns().catch(() => ({ items: [] })),
           getOwnerWeekdayPatterns(roomId).catch(() => ({ items: [] }))
         ]);
     
+        setKpis(kpiRes);
+        setHistory(forecastRes.history || []);
         setForecast(forecastRes.forecast || []);
+        setTopWasteDays(topWasteRes.days || []);
         setAnomalies(anomalyRes.items || []);
         setPatterns(patternRes.items || []);
         setWeekdayPatterns(weekdayRes.items || []);
+        setRoomsOverview([]);
+        setAlerts([]);
       } catch (error) {
-        console.error("Single room analytics refresh failed:", error);
+        console.error("Single room refresh failed:", error);
+      } finally {
+        setLoading(false);
       }
     }
 
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
 
     if (roomId === "all") {
       loadAllRoomsView();
       liveInterval = setInterval(loadAllRoomsView, 10000);
     } else {
       loadSingleRoomLive();
-      loadSingleRoomAnalytics();
 
       liveInterval = setInterval(loadSingleRoomLive, 10000);
-      analyticsInterval = setInterval(loadSingleRoomAnalytics, 60000);
     }
 
     return () => {
       if (liveInterval) clearInterval(liveInterval);
-      if (analyticsInterval) clearInterval(analyticsInterval);
     };
-  }, [roomId, forecastDays]);
+  }, [roomId, forecastDays, floorId]);
 
   useEffect(() => {
     if (roomId === "all" || !history.length) return;
@@ -319,17 +354,18 @@ export default function OwnerDashboard() {
     const latestDate = new Date(latest.date);
 
     if (!Number.isNaN(latestDate.getTime())) {
-      setCalendarMonth(
-        new Date(latestDate.getFullYear(), latestDate.getMonth(), 1)
-      );
-
       const key = `${latestDate.getFullYear()}-${String(
         latestDate.getMonth() + 1
       ).padStart(2, "0")}-${String(latestDate.getDate()).padStart(2, "0")}`;
 
-      setSelectedDay({
-        ...latest,
-        date: key
+      queueMicrotask(() => {
+        setCalendarMonth(
+          new Date(latestDate.getFullYear(), latestDate.getMonth(), 1)
+        );
+        setSelectedDay({
+          ...latest,
+          date: key
+        });
       });
     }
   }, [history, roomId]);
@@ -381,7 +417,7 @@ export default function OwnerDashboard() {
         ? "normal"
         : "";
 
-    return history.reduce((acc, item) => {
+    const mappedHistory = history.reduce((acc, item) => {
       const key = toDateKey(item.date);
       if (!key) return acc;
 
@@ -432,7 +468,30 @@ export default function OwnerDashboard() {
 
       return acc;
     }, {});
-  }, [history, kpis, patternByDate]);
+
+    topWasteDays.forEach((item) => {
+      const key = toDateKey(item.date);
+      if (!key || mappedHistory[key]) return;
+
+      const total = Number(item.total_energy_kwh || 0);
+      const waste = Number(item.wasted_energy_kwh || 0);
+      const ratio =
+        item.waste_ratio_percent !== undefined && item.waste_ratio_percent !== null
+          ? Number(Number(item.waste_ratio_percent).toFixed(2))
+          : total > 0
+          ? Number(((waste / total) * 100).toFixed(2))
+          : 0;
+
+      mappedHistory[key] = {
+        ...item,
+        date: key,
+        waste_ratio_percent: ratio,
+        waste_status: ratio >= 30 ? "critical" : ratio >= 15 ? "warning" : "normal"
+      };
+    });
+
+    return mappedHistory;
+  }, [history, kpis, patternByDate, topWasteDays]);
 
   const calendarDays = useMemo(() => {
     const year = calendarMonth.getFullYear();
@@ -547,45 +606,19 @@ export default function OwnerDashboard() {
     }
   };
 
-  const patternSummary = useMemo(() => {
-    if (!patterns.length) {
-      return {
-        latestPattern: "-",
-        mostCommonPattern: "-",
-        highWasteDays: 0,
-        efficientDays: 0
-      };
-    }
-  
-    const sorted = [...patterns].sort((a, b) => b.date.localeCompare(a.date));
-    const latestPattern = sorted[0]?.pattern_name || "-";
-  
-    const counts = patterns.reduce((acc, item) => {
-      const key = item.pattern_name || "Unknown";
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
-  
-    const mostCommonPattern =
-      Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
-  
-    return {
-      latestPattern,
-      mostCommonPattern,
-      highWasteDays: counts["High Waste Pattern"] || 0,
-      efficientDays: counts["Efficient Usage"] || 0
-    };
-  }, [patterns]);
-
   if (loading) return <LoadingState />;
 
   return (
     <div className="page-grid owner-dashboard">
       <FilterBar
+        floorId={floorId}
+        setFloorId={setFloorId}
         roomId={roomId}
         setRoomId={setRoomId}
         forecastDays={forecastDays}
         setForecastDays={setForecastDays}
+        availableFloors={availableFloors}
+        availableRooms={availableRooms}
       />
 
       <div className="stats-grid">

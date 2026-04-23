@@ -4,13 +4,32 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL
 });
 
+export async function getAvailableFloors() {
+  const { data } = await api.get("/rooms/available-floors");
+  return data;
+}
+
+export async function getAvailableRooms(floorId) {
+  const { data } = await api.get("/rooms/available-rooms", {
+    params: floorId && floorId !== "all" ? { floorId } : {}
+  });
+  return data;
+}
+
+export async function getFloorOverview() {
+  const { data } = await api.get("/rooms/floors/overview");
+  return data;
+}
+
 export async function getOwnerKpis(roomId = "A101") {
   const { data } = await api.get(`/rooms/${roomId}/owner-kpis`);
   return data;
 }
 
-export async function getOwnerRoomsOverview() {
-  const { data } = await api.get(`/rooms/owner/rooms-overview`);
+export async function getOwnerRoomsOverview(floorId) {
+  const { data } = await api.get("/rooms/owner/rooms-overview", {
+    params: floorId && floorId !== "all" ? { floorId } : {}
+  });
   return data;
 }
 
