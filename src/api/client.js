@@ -101,7 +101,6 @@ export async function getTopWasteDays(roomId = "A101", limit = 5) {
   const { data } = await api.get(`/rooms/${roomId}/energy/top-waste-days?limit=${limit}`);
   return data;
 }
-
 export async function getWardenSummary() {
   const { data } = await api.get(`/rooms/warden/summary`);
   return data;
@@ -114,6 +113,16 @@ export async function getWardenRoomsStatus() {
 
 export async function getWardenNoiseIssues() {
   const { data } = await api.get(`/rooms/warden/noise-issues`);
+  return data;
+}
+
+export async function getWardenInspectionQueue() {
+  const { data } = await api.get(`/rooms/warden/inspection-queue`);
+  return data;
+}
+
+export async function getWardenNoiseTrend(days = 7) {
+  const { data } = await api.get(`/rooms/warden/noise-trend?days=${days}`);
   return data;
 }
 
@@ -145,4 +154,24 @@ export async function getStudentHistory(roomId = "A101") {
 export async function getStudentAlerts(roomId = "A101", limit = 20) {
   const { data } = await api.get(`/rooms/student/${roomId}/alerts?limit=${limit}`);
   return data;
+}
+
+export async function getWardenFeatureImportance() {
+  const res = await api.get("/rooms/warden/feature-importance");
+  return res.data;
+}
+
+export async function getWardenAnomalies() {
+  const res = await api.get("/rooms/warden/anomalies");
+  return res.data;
+}
+
+export async function getWardenPatterns() {
+  const res = await api.get("/rooms/warden/patterns");
+  return res.data;
+}
+
+export async function getWardenForecasts() {
+  const res = await api.get("/rooms/warden/forecasts");
+  return res.data;
 }
