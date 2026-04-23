@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -41,6 +41,7 @@ import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import LoadingState from "../components/LoadingState";
 import StatusBadge from "../components/StatusBadge";
+import { useChatbotContext } from "../context/ChatbotContext";
 
 function AlertCard({ alert, onResolve, onDelete }) {
   const cls =
@@ -177,6 +178,7 @@ function OwnerRoomTile({ room }) {
 }
 
 export default function OwnerDashboard() {
+  const { registerChatContext, clearChatContext } = useChatbotContext();
   const [floorId, setFloorId] = useState("all");
   const [roomId, setRoomId] = useState(() => {
     try {
@@ -697,6 +699,40 @@ export default function OwnerDashboard() {
 
     setRoomId(payload.key);
   };
+
+  const handleChatActions = useCallback((actions) => {
+    actions.forEach((action) => {
+      if (action.type === "switch_floor") {
+        setFloorId(action.value);
+        setRoomId("all");
+      }
+
+      if (action.type === "switch_room") {
+        setRoomId(action.value);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    registerChatContext({
+      role: "owner",
+      dashboardState: {
+        floorId,
+        roomId
+      },
+      onAction: handleChatActions
+    });
+
+    return () => {
+      clearChatContext();
+    };
+  }, [
+    floorId,
+    roomId,
+    handleChatActions,
+    registerChatContext,
+    clearChatContext
+  ]);
 
   if (loading) return <LoadingState />;
 

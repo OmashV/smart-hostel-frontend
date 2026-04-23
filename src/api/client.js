@@ -101,6 +101,12 @@ export async function getTopWasteDays(roomId = "A101", limit = 5) {
   const { data } = await api.get(`/rooms/${roomId}/energy/top-waste-days?limit=${limit}`);
   return data;
 }
+
+export async function chatWithDashboardAgent(payload) {
+  const { data } = await api.post("/chat", payload);
+  return data;
+}
+
 export async function getWardenSummary() {
   const { data } = await api.get(`/rooms/warden/summary`);
   return data;
