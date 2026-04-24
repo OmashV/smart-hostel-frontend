@@ -395,6 +395,73 @@ export default function WardenDashboard() {
     return [...actualRows, ...predictedRows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }, [wardenHistory, wardenForecasts]);
 
+
+  const recentHistoryRows = useMemo(() => {
+    const historyRows = (wardenHistory || []).map((item) => ({
+      room_id: item.room_id || selectedRoomFilter || "All",
+      date: item.date,
+      occupied_count: Number(item.occupied_count || 0),
+      empty_count: Number(item.empty_count || 0),
+      warning_count: Number(item.warning_count || 0),
+      violation_count: Number(item.violation_count || 0),
+      inspection_count: Number(item.inspection_count || 0),
+      avg_sound_peak: Number(item.avg_sound_peak || 0),
+      source: item.source || item.source_type || "MongoDB summary"
+    }));
+
+    const liveRoomRows = (rooms || []).map((room) => ({
+      room_id: room.room_id,
+      date: room.captured_at ? formatDate(room.captured_at) : "Live status",
+      occupied_count: room.occupancy_stat || "-",
+      empty_count: String(room.occupancy_stat || "").toLowerCase() === "empty" ? 1 : 0,
+      warning_count: room.noise_stat || "-",
+      violation_count: room.needs_inspection ? 1 : 0,
+      inspection_count: room.needs_inspection ? 1 : 0,
+      avg_sound_peak: Number(room.sound_peak || 0),
+      source: "Latest sensor status"
+    }));
+
+    return [...liveRoomRows, ...historyRows]
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .slice(0, 12);
+  }, [wardenHistory, rooms, selectedRoomFilter]);
+
+  const generatedInsights = useMemo(() => {
+    const highestRiskPattern = [...patternRows].sort((a, b) => Number(b.avg_critical_ratio || 0) - Number(a.avg_critical_ratio || 0))[0];
+    const nextForecast = (wardenForecasts || [])[0];
+    const latestAnomaly = (wardenAnomalies || [])[0];
+    const topFeature = (wardenFeatureImportance || [])[0];
+    const inspectionReason = filteredRooms.find((room) => room.needs_inspection)?.inspection_reasons?.[0];
+
+    return [
+      {
+        title: "Inspection priority",
+        value: `${cleaningPriorityRooms.length} room${cleaningPriorityRooms.length === 1 ? "" : "s"}`,
+        detail: inspectionReason || "Priority is generated from current room status and ML alert/anomaly evidence."
+      },
+      {
+        title: "Highest weekly risk pattern",
+        value: highestRiskPattern ? `${highestRiskPattern.day} · ${highestRiskPattern.usual_pattern}` : "No pattern",
+        detail: highestRiskPattern ? `KMeans cluster ${highestRiskPattern.cluster_id} with ${formatNumber(highestRiskPattern.avg_critical_ratio)}% critical ratio and ${formatNumber(highestRiskPattern.avg_noise_level)} average noise.` : "Run the Warden ML pipeline to generate weekly patterns."
+      },
+      {
+        title: "Next forecast signal",
+        value: nextForecast ? `${nextForecast.date}` : "No forecast",
+        detail: nextForecast ? `Predicted occupancy ${formatNumber(nextForecast.predicted_occupied_count)}, predicted warnings ${formatNumber(nextForecast.predicted_warning_count)} using ${nextForecast.model_name || "forecast model"}.` : "Forecast data is generated from historical MongoDB summaries."
+      },
+      {
+        title: "Latest anomaly insight",
+        value: latestAnomaly ? `${latestAnomaly.room_id || selectedRoomFilter} · score ${formatNumber(latestAnomaly.anomaly_score, 3)}` : "No anomaly",
+        detail: latestAnomaly?.reason || "IsolationForest did not return a current anomaly record for this selection."
+      },
+      {
+        title: "Strongest ML driver",
+        value: topFeature ? topFeature.feature : "No feature importance",
+        detail: topFeature ? `Model importance ${formatNumber(topFeature.importance, 4)} from the Warden feature-importance output.` : "Feature importance appears after the ML pipeline is run."
+      }
+    ];
+  }, [patternRows, wardenForecasts, wardenAnomalies, wardenFeatureImportance, filteredRooms, cleaningPriorityRooms, selectedRoomFilter]);
+
   const isSingleRoom = selectedRoomFilter !== "All" && !onlyAttention;
   const displayedOccupied = selectedRoomFilter === "All" || onlyAttention ? summary?.occupied_rooms ?? 0 : selectedRoomData?.occupancy_stat === "Occupied" ? 1 : 0;
   const displayedEmpty = selectedRoomFilter === "All" || onlyAttention ? summary?.empty_rooms ?? 0 : selectedRoomData?.occupancy_stat === "Empty" ? 1 : 0;
@@ -451,6 +518,25 @@ export default function WardenDashboard() {
         </SectionCard>
       </div>
 
+      {!isSingleRoom ? (
+        <SectionCard title="Recent History">
+          {recentHistoryRows.length ? (
+            <DataTable
+              columns={[
+                { key: "room_id", label: "Room" },
+                { key: "date", label: "Time / Date" },
+                { key: "occupied_count", label: "Occupancy / Occupied" },
+                { key: "warning_count", label: "Noise / Warnings", render: (row) => typeof row.warning_count === "string" ? <HistoryWord value={row.warning_count} /> : row.warning_count },
+                { key: "violation_count", label: "Critical / Inspection" },
+                { key: "avg_sound_peak", label: "Avg / Live Noise", render: (row) => `${formatNumber(row.avg_sound_peak)} dB` },
+                { key: "source", label: "Source" }
+              ]}
+              rows={recentHistoryRows}
+            />
+          ) : <EmptyState text="No recent history available yet." />}
+        </SectionCard>
+      ) : null}
+
       {isSingleRoom ? <>
         <SectionCard title="Historical and Forecasted Room Trend">
           {forecastChartData.length ? <div className="chart-shell owner-forecast-chart-shell"><ResponsiveContainer width="100%" height={360}><LineChart data={forecastChartData} margin={{ top: 10, right: 24, left: 6, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" /><XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} minTickGap={24} /><YAxis tick={{ fill: "#64748b", fontSize: 11 }} allowDecimals={false} /><Tooltip contentStyle={chartTooltipStyle} /><Legend content={renderForecastLegend} /><Line type="monotone" dataKey="actual_occupancy" name="Actual Occupancy" stroke="#2563eb" strokeWidth={2.4} dot={false} connectNulls /><Line type="monotone" dataKey="actual_warnings" name="Actual Warnings" stroke="#f59e0b" strokeWidth={2.2} dot={false} connectNulls /><Line type="monotone" dataKey="predicted_occupancy" name="Predicted Occupancy" stroke="#2563eb" strokeWidth={2.4} strokeDasharray="7 5" dot={false} connectNulls /><Line type="monotone" dataKey="predicted_warnings" name="Predicted Warnings" stroke="#f59e0b" strokeWidth={2.2} strokeDasharray="7 5" dot={false} connectNulls /></LineChart></ResponsiveContainer></div> : <EmptyState text="No forecast or history data available for this room." />}
@@ -473,8 +559,16 @@ export default function WardenDashboard() {
           </SectionCard>
         </div>
 
-        <SectionCard title="Weekly Pattern Explanation">
-          <div className="warden-pattern-explain-list">{patternRows.map((row) => <div className="warden-pattern-explain-item" key={`${row.day}-explain`}><div><strong>{row.day}</strong><span>{row.day_type}</span></div><HistoryWord value={row.usual_pattern} /><p>Average occupancy {formatNumber(row.avg_occupancy)}, average noise {formatNumber(row.avg_noise_level)}, warnings {formatNumber(row.avg_warnings)}, critical ratio {formatNumber(row.avg_critical_ratio)}%, cluster {row.cluster_id}.</p></div>)}</div>
+        <SectionCard title="Insight Generation">
+          <div className="warden-insight-generation-list">
+            {generatedInsights.map((insight) => (
+              <div className="warden-insight-generation-card" key={insight.title}>
+                <span>{insight.title}</span>
+                <strong>{insight.value}</strong>
+                <p>{insight.detail}</p>
+              </div>
+            ))}
+          </div>
         </SectionCard>
       </> : null}
 
