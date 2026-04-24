@@ -62,10 +62,28 @@ export default function FloatingDashboardChatbot() {
     return actions;
   };
 
+  const isNavigationRequest = (text) => {
+    const t = String(text || "").toLowerCase();
+    return (
+      t.includes("open ") ||
+      t.includes("go to ") ||
+      t.includes("switch to ") ||
+      t.includes("show me ") ||
+      t.includes("take me to ")
+    );
+  };
+
   const cleanReply = (text) =>
     text
       .split("\n")
-      .filter((line) => !line.trim().startsWith("ACTION:"))
+      .filter((line) => {
+        const t = line.trim();
+        return (
+          !t.startsWith("ACTION:") &&
+          !t.startsWith("<function=") &&
+          t !== "</function>"
+        );
+      })
       .join("\n")
       .trim();
 
@@ -93,7 +111,7 @@ export default function FloatingDashboardChatbot() {
         { role: "assistant", content: cleanReply(reply) }
       ]);
 
-      if (actions.length && onAction) {
+      if (actions.length && onAction && isNavigationRequest(userMessage)) {
         onAction(actions);
       }
     } catch {
@@ -145,10 +163,13 @@ export default function FloatingDashboardChatbot() {
               placeholder="Ask a question about this dashboard..."
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") sendMessage();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  sendMessage();
+                }
               }}
             />
-            <button onClick={sendMessage} disabled={loading}>
+            <button type="button" onClick={sendMessage} disabled={loading}>
               {loading ? "..." : "Send"}
             </button>
           </div>

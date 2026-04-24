@@ -33,6 +33,13 @@ export async function getOwnerRoomsOverview(floorId) {
   return data;
 }
 
+export async function getOwnerOverviewSnapshot(floorId = "all") {
+  const { data } = await api.get("/rooms/owner/overview-snapshot", {
+    params: { floorId }
+  });
+  return data;
+}
+
 export async function getOwnerRoomComparison() {
   const { data } = await api.get(`/rooms/owner/room-comparison`);
   return data;
