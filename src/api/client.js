@@ -11,7 +11,7 @@ export async function getAvailableFloors() {
 
 export async function getAvailableRooms(floorId) {
   const { data } = await api.get("/rooms/available-rooms", {
-    params: floorId && floorId !== "all" ? { floorId } : {}
+    params: floorId && floorId !== "All" && floorId !== "all" ? { floorId } : {}
   });
   return data;
 }
@@ -28,7 +28,7 @@ export async function getOwnerKpis(roomId = "A101") {
 
 export async function getOwnerRoomsOverview(floorId) {
   const { data } = await api.get("/rooms/owner/rooms-overview", {
-    params: floorId && floorId !== "all" ? { floorId } : {}
+    params: floorId && floorId !== "All" && floorId !== "all" ? { floorId } : {}
   });
   return data;
 }
@@ -200,17 +200,36 @@ export async function getWardenFeatureImportance() {
   return res.data;
 }
 
-export async function getWardenAnomalies() {
-  const res = await api.get("/rooms/warden/anomalies");
+export async function getWardenAnomalies(roomId = "All") {
+  const res = await api.get("/rooms/warden/anomalies", {
+    params: roomId && roomId !== "All" ? { roomId } : {}
+  });
   return res.data;
 }
 
-export async function getWardenPatterns() {
-  const res = await api.get("/rooms/warden/patterns");
+export async function getWardenPatterns(roomId = "All") {
+  const res = await api.get("/rooms/warden/patterns", {
+    params: roomId && roomId !== "All" ? { roomId } : { roomId: "All" }
+  });
   return res.data;
 }
 
-export async function getWardenForecasts() {
-  const res = await api.get("/rooms/warden/forecasts");
+export async function getWardenForecasts(roomId = "All") {
+  const res = await api.get("/rooms/warden/forecasts", {
+    params: roomId && roomId !== "All" ? { roomId } : {}
+  });
   return res.data;
+}
+
+export async function getWardenMlAlerts(roomId = "All", limit = 20) {
+  const res = await api.get("/rooms/warden/ml-alerts", {
+    params: { roomId, limit }
+  });
+  return res.data;
+}
+
+
+export async function askDashboardAssistant(question, role = "warden") {
+  const { data } = await api.post("/chat/query", { question, role });
+  return data;
 }
