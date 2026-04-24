@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  LineChart,
   Line,
   Area,
   AreaChart,
+  BarChart,
+  Bar,
   ResponsiveContainer,
   Tooltip,
   CartesianGrid,
   XAxis,
   YAxis,
-  Legend,
-  ReferenceLine
+  Legend
 } from "recharts";
 
 import {
@@ -21,8 +21,6 @@ import {
   getSecurityAnomalies
 } from "../api/client";
 
-import StatCard from "../components/StatCard";
-import SectionCard from "../components/SectionCard";
 import DataTable from "../components/DataTable";
 import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
@@ -43,8 +41,9 @@ function SeverityBadge({ value }) {
 
 // ─── Outside-band pill ───────────────────────────────────────────────────────
 function BandPill({ value }) {
-  if (value === null || value === undefined)
+  if (value === null || value === undefined) {
     return <span style={styles.badge.neutral}>—</span>;
+  }
   return value ? (
     <span style={styles.badge.critical}>Outside Band</span>
   ) : (
@@ -55,11 +54,10 @@ function BandPill({ value }) {
 // ─── Anomaly score bar ───────────────────────────────────────────────────────
 function ScoreBar({ score }) {
   if (score == null) return <span style={{ color: "#64748b" }}>—</span>;
-  // Isolation Forest scores: typically -0.5 to +0.5. More negative = more anomalous.
-  const normalised = Math.max(0, Math.min(1, (score + 0.5) / 1)); // 0=most anomalous, 1=normal
+  const normalised = Math.max(0, Math.min(1, (score + 0.5) / 1));
   const pct = Math.round(normalised * 100);
-  const color =
-    pct < 30 ? "#ef4444" : pct < 60 ? "#f97316" : "#22c55e";
+  const color = pct < 30 ? "#ef4444" : pct < 60 ? "#f97316" : "#22c55e";
+
   return (
     <div style={styles.scoreBar.wrap}>
       <div style={{ ...styles.scoreBar.fill, width: `${pct}%`, background: color }} />
@@ -68,7 +66,7 @@ function ScoreBar({ score }) {
   );
 }
 
-// ─── Custom chart tooltip ─────────────────────────────────────────────────────
+// ─── Tooltips ────────────────────────────────────────────────────────────────
 function TrendTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
@@ -77,6 +75,21 @@ function TrendTooltip({ active, payload, label }) {
       {payload.map((p) => (
         <p key={p.name} style={{ color: p.color, margin: "2px 0", fontSize: 12 }}>
           {p.name}: <strong>{p.value} min</strong>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function RoomOverviewTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div style={styles.tooltip}>
+      <p style={styles.tooltipTitle}>Room {label}</p>
+      {payload.map((p) => (
+        <p key={p.name} style={{ color: p.color, margin: "2px 0", fontSize: 12 }}>
+          {p.name}: <strong>{p.value}</strong>
         </p>
       ))}
     </div>
@@ -96,7 +109,12 @@ function RefreshButton({ onClick, loading }) {
         cursor: loading ? "not-allowed" : "pointer"
       }}
     >
-      <span style={{ display: "inline-block", animation: loading ? "spin 1s linear infinite" : "none" }}>
+      <span
+        style={{
+          display: "inline-block",
+          animation: loading ? "spin 1s linear infinite" : "none"
+        }}
+      >
         ↻
       </span>{" "}
       {loading ? "Refreshing…" : "Refresh"}
@@ -107,19 +125,20 @@ function RefreshButton({ onClick, loading }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function SecurityDashboard() {
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [error, setError] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState("all");
-  const [lastUpdated, setLastUpdated]   = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  const [summary,   setSummary]   = useState(null);
-  const [rooms,     setRooms]     = useState([]);
-  const [events,    setEvents]    = useState([]);
-  const [trend,     setTrend]     = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [rooms, setRooms] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [trend, setTrend] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
       const roomId = selectedRoom === "all" ? undefined : selectedRoom;
 
@@ -145,10 +164,10 @@ export default function SecurityDashboard() {
     }
   }, [selectedRoom]);
 
-  // Initial load + re-fetch on room change
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  // Near real-time polling every 30 s
   useEffect(() => {
     const id = setInterval(load, 30000);
     return () => clearInterval(id);
@@ -156,23 +175,101 @@ export default function SecurityDashboard() {
 
   const availableRooms = useMemo(() => {
     const ids = new Set();
-    rooms.forEach((r)     => r.room_id && ids.add(r.room_id));
-    events.forEach((r)    => r.room_id && ids.add(r.room_id));
+    rooms.forEach((r) => r.room_id && ids.add(r.room_id));
+    events.forEach((r) => r.room_id && ids.add(r.room_id));
     anomalies.forEach((r) => r.room_id && ids.add(r.room_id));
     return ["all", ...Array.from(ids).sort()];
   }, [rooms, events, anomalies]);
 
-  // ── Chart data ──────────────────────────────────────────────────────────────
+  // ── Single-room trend data ────────────────────────────────────────────────
   const trendData = trend.map((item) => ({
-  hour:     item.hour_label,
-  expected: item.expected_door_stable_min,
-  actual:   item.actual_door_stable_min,   // null for future hours — recharts shows gap
-  upper:    item.upper_bound_ms != null ? +(item.upper_bound_ms / 60000).toFixed(2) : null,
-  lower:    item.lower_bound_ms != null ? +(item.lower_bound_ms / 60000).toFixed(2) : null,
-  // Pass through for tooltip
-  latest_captured_at: item.latest_captured_at,
-  trend_status:       item.trend_status
-}));
+    hour: item.hour_label,
+    expected: item.expected_door_stable_min,
+    actual: item.actual_door_stable_min,
+    upper:
+      item.upper_bound_ms != null
+        ? +(item.upper_bound_ms / 60000).toFixed(2)
+        : null,
+    lower:
+      item.lower_bound_ms != null
+        ? +(item.lower_bound_ms / 60000).toFixed(2)
+        : null,
+    latest_captured_at: item.latest_captured_at,
+    trend_status: item.trend_status
+  }));
+
+  // ── All-rooms overview data ───────────────────────────────────────────────
+  const roomOverviewData = useMemo(() => {
+    const roomMap = new Map();
+
+    const ensureRoom = (roomId) => {
+      if (!roomId) return null;
+
+      if (!roomMap.has(roomId)) {
+        roomMap.set(roomId, {
+          room_id: roomId,
+          duration_total: 0,
+          duration_count: 0,
+          motion_total: 0,
+          anomaly_count: 0
+        });
+      }
+
+      return roomMap.get(roomId);
+    };
+
+    rooms.forEach((room) => {
+      const item = ensureRoom(room.room_id);
+      if (!item) return;
+
+      if (room.door_stable_ms != null) {
+        item.duration_total += room.door_stable_ms / 60000;
+        item.duration_count += 1;
+      }
+
+      item.motion_total += room.motion_count ?? 0;
+    });
+
+    events.forEach((event) => {
+      const item = ensureRoom(event.room_id);
+      if (!item) return;
+
+      if (event.door_stable_ms != null) {
+        item.duration_total += event.door_stable_ms / 60000;
+        item.duration_count += 1;
+      }
+
+      item.motion_total += event.motion_count ?? 0;
+    });
+
+    anomalies.forEach((anomaly) => {
+      const item = ensureRoom(anomaly.room_id);
+      if (!item) return;
+
+      if (anomaly.door_stable_min != null) {
+        item.duration_total += anomaly.door_stable_min;
+        item.duration_count += 1;
+      } else if (anomaly.door_stable_ms != null) {
+        item.duration_total += anomaly.door_stable_ms / 60000;
+        item.duration_count += 1;
+      }
+
+      item.motion_total += anomaly.motion_count ?? 0;
+      item.anomaly_count += 1;
+    });
+
+    return Array.from(roomMap.values())
+      .map((item) => ({
+        room_id: item.room_id,
+        duration_min:
+          item.duration_count > 0
+            ? +(item.duration_total / item.duration_count).toFixed(2)
+            : 0,
+        motion_count: item.motion_total,
+        anomaly_count: item.anomaly_count
+      }))
+      .sort((a, b) => a.room_id.localeCompare(b.room_id));
+  }, [rooms, events, anomalies]);
 
   const renderRoomLink = (row) => (
     <button
@@ -184,14 +281,12 @@ export default function SecurityDashboard() {
     </button>
   );
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   if (loading && !summary) return <LoadingState />;
 
   return (
     <div style={styles.page}>
       <style>{globalCss}</style>
 
-      {/* ── Header ── */}
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>
@@ -206,14 +301,8 @@ export default function SecurityDashboard() {
         <RefreshButton onClick={load} loading={loading} />
       </div>
 
-      {/* ── Error banner ── */}
-      {error && (
-        <div style={styles.errorBanner}>
-          ⚠ {error}
-        </div>
-      )}
+      {error && <div style={styles.errorBanner}>⚠ {error}</div>}
 
-      {/* ── Scope selector ── */}
       <div style={styles.scopeBar}>
         <span style={styles.scopeLabel}>Scope:</span>
         <select
@@ -227,6 +316,7 @@ export default function SecurityDashboard() {
             </option>
           ))}
         </select>
+
         {selectedRoom !== "all" && (
           <button
             type="button"
@@ -236,12 +326,12 @@ export default function SecurityDashboard() {
             ← All Rooms
           </button>
         )}
+
         {selectedRoom !== "all" && (
           <span style={styles.scopePill}>{selectedRoom}</span>
         )}
       </div>
 
-      {/* ── KPI cards ── */}
       <div style={styles.kpiGrid}>
         <KpiCard
           label="Active Alerts"
@@ -276,43 +366,85 @@ export default function SecurityDashboard() {
         />
       </div>
 
-      {/* ── Trend chart ── */}
       <section style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
             <h2 style={styles.cardTitle}>
-              Door Behaviour Trend
+              {selectedRoom === "all"
+                ? "All Rooms Security Overview"
+                : "Door Behaviour Trend"}
               {selectedRoom !== "all" && (
                 <span style={styles.roomTag}> — {selectedRoom}</span>
               )}
             </h2>
             <p style={styles.cardDesc}>
-              Prophet-forecasted expected duration (with 95 % confidence band) vs recent actual behaviour.
-              Points outside the shaded band are flagged as anomalous.
+              {selectedRoom === "all"
+                ? "Compare rooms using average door-open duration and anomaly counts."
+                : "Prophet-forecasted expected duration (with 95 % confidence band) vs recent actual behaviour. Points outside the shaded band are flagged as anomalous."}
             </p>
           </div>
-          <span style={styles.mlBadge}>Prophet</span>
+          <span style={styles.mlBadge}>
+            {selectedRoom === "all" ? "Overview" : "Prophet"}
+          </span>
         </div>
 
-        {trendData.length ? (
+        {selectedRoom === "all" ? (
+          roomOverviewData.length ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart
+                data={roomOverviewData}
+                margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="room_id" tick={{ fill: "#64748b", fontSize: 11 }} />
+                <YAxis tick={{ fill: "#64748b", fontSize: 11 }} />
+                <Tooltip content={<RoomOverviewTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 12, color: "#64748b" }} />
+                <Bar
+                  dataKey="duration_min"
+                  name="Avg Door Duration (min)"
+                  radius={[6, 6, 0, 0]}
+                  fill="#6366f1"
+                />
+                <Bar
+                  dataKey="anomaly_count"
+                  name="Anomaly Count"
+                  radius={[6, 6, 0, 0]}
+                  fill="#ef4444"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState text="No all-room overview data available." />
+          )
+        ) : trendData.length ? (
           <ResponsiveContainer width="100%" height={320}>
-            <AreaChart data={trendData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <AreaChart
+              data={trendData}
+              margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="bandGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.15} />
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
                   <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
+
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="hour" tick={{ fill: "#94a3b8", fontSize: 11 }} />
               <YAxis
                 tick={{ fill: "#94a3b8", fontSize: 11 }}
-                label={{ value: "min", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 11 }}
+                label={{
+                  value: "min",
+                  angle: -90,
+                  position: "insideLeft",
+                  fill: "#64748b",
+                  fontSize: 11
+                }}
               />
               <Tooltip content={<TrendTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
 
-              {/* Confidence band */}
               {trendData[0]?.upper != null && (
                 <Area
                   dataKey="upper"
@@ -363,7 +495,6 @@ export default function SecurityDashboard() {
         )}
       </section>
 
-      {/* ── Anomalies table ── */}
       <section style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
@@ -408,27 +539,40 @@ export default function SecurityDashboard() {
                 key: "door_stable_min",
                 label: "Actual",
                 render: (row) =>
-                  row.door_stable_min != null
-                    ? <span style={{ fontVariantNumeric: "tabular-nums" }}>{row.door_stable_min} min</span>
-                    : "—"
+                  row.door_stable_min != null ? (
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {row.door_stable_min} min
+                    </span>
+                  ) : (
+                    "—"
+                  )
               },
               {
                 key: "expected_door_stable_min",
                 label: "Expected",
                 render: (row) =>
-                  row.expected_door_stable_min != null
-                    ? <span style={{ color: "#6366f1", fontVariantNumeric: "tabular-nums" }}>
-                        {row.expected_door_stable_min} min
-                      </span>
-                    : "—"
+                  row.expected_door_stable_min != null ? (
+                    <span
+                      style={{
+                        color: "#6366f1",
+                        fontVariantNumeric: "tabular-nums"
+                      }}
+                    >
+                      {row.expected_door_stable_min} min
+                    </span>
+                  ) : (
+                    "—"
+                  )
               },
               {
                 key: "reason",
                 label: "Reason",
                 render: (row) =>
-                  row.reason
-                    ? <span style={styles.reasonText}>{row.reason}</span>
-                    : "—"
+                  row.reason ? (
+                    <span style={styles.reasonText}>{row.reason}</span>
+                  ) : (
+                    "—"
+                  )
               },
               {
                 key: "captured_at",
@@ -447,7 +591,6 @@ export default function SecurityDashboard() {
         )}
       </section>
 
-      {/* ── Suspicious rooms ── */}
       <section style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
@@ -474,9 +617,12 @@ export default function SecurityDashboard() {
                   <span
                     style={{
                       ...styles.badge.neutral,
-                      background: row.door_status === "Open" ? "#fef2f2" : "#f0fdf4",
-                      color:      row.door_status === "Open" ? "#ef4444" : "#16a34a",
-                      borderColor: row.door_status === "Open" ? "#fecaca" : "#bbf7d0"
+                      background:
+                        row.door_status === "Open" ? "#fef2f2" : "#f0fdf4",
+                      color:
+                        row.door_status === "Open" ? "#ef4444" : "#16a34a",
+                      borderColor:
+                        row.door_status === "Open" ? "#fecaca" : "#bbf7d0"
                     }}
                   >
                     {row.door_status}
@@ -488,8 +634,13 @@ export default function SecurityDashboard() {
                 label: "Duration",
                 render: (row) => {
                   const min = row.door_stable_ms / 60000;
-                  const color = min > 60 ? "#ef4444" : min > 30 ? "#f97316" : "#64748b";
-                  return <span style={{ color, fontWeight: 600 }}>{formatDuration(row.door_stable_ms)}</span>;
+                  const color =
+                    min > 60 ? "#ef4444" : min > 30 ? "#f97316" : "#64748b";
+                  return (
+                    <span style={{ color, fontWeight: 600 }}>
+                      {formatDuration(row.door_stable_ms)}
+                    </span>
+                  );
                 }
               },
               {
@@ -518,7 +669,6 @@ export default function SecurityDashboard() {
         )}
       </section>
 
-      {/* ── Recent events ── */}
       <section style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
@@ -532,7 +682,14 @@ export default function SecurityDashboard() {
               Latest door activity for real-time monitoring.
             </p>
           </div>
-          <span style={{ ...styles.mlBadge, background: "#ecfeff", color: "#0e7490", borderColor: "#a5f3fc" }}>
+          <span
+            style={{
+              ...styles.mlBadge,
+              background: "#ecfeff",
+              color: "#0e7490",
+              borderColor: "#a5f3fc"
+            }}
+          >
             Live
           </span>
         </div>
@@ -548,9 +705,12 @@ export default function SecurityDashboard() {
                   <span
                     style={{
                       ...styles.badge.neutral,
-                      background: row.door_status === "Open" ? "#fef2f2" : "#f0fdf4",
-                      color:      row.door_status === "Open" ? "#ef4444" : "#16a34a",
-                      borderColor: row.door_status === "Open" ? "#fecaca" : "#bbf7d0"
+                      background:
+                        row.door_status === "Open" ? "#fef2f2" : "#f0fdf4",
+                      color:
+                        row.door_status === "Open" ? "#ef4444" : "#16a34a",
+                      borderColor:
+                        row.door_status === "Open" ? "#fecaca" : "#bbf7d0"
                     }}
                   >
                     {row.door_status}
@@ -562,8 +722,13 @@ export default function SecurityDashboard() {
                 label: "Duration",
                 render: (row) => {
                   const min = row.door_stable_ms / 60000;
-                  const color = min > 60 ? "#ef4444" : min > 30 ? "#f97316" : "#64748b";
-                  return <span style={{ color, fontWeight: 600 }}>{formatDuration(row.door_stable_ms)}</span>;
+                  const color =
+                    min > 60 ? "#ef4444" : min > 30 ? "#f97316" : "#64748b";
+                  return (
+                    <span style={{ color, fontWeight: 600 }}>
+                      {formatDuration(row.door_stable_ms)}
+                    </span>
+                  );
                 }
               },
               {
@@ -595,14 +760,16 @@ export default function SecurityDashboard() {
   );
 }
 
-// ─── KPI card sub-component ───────────────────────────────────────────────────
+// ─── KPI card ────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, accent, icon, tag }) {
   return (
     <div style={{ ...styles.kpiCard, borderTopColor: accent }}>
       <div style={styles.kpiTop}>
         <span style={styles.kpiIcon}>{icon}</span>
         {tag && (
-          <span style={{ ...styles.mlBadge, fontSize: 9, padding: "2px 6px" }}>{tag}</span>
+          <span style={{ ...styles.mlBadge, fontSize: 9, padding: "2px 6px" }}>
+            {tag}
+          </span>
         )}
       </div>
       <p style={{ ...styles.kpiValue, color: accent }}>{value}</p>
@@ -611,7 +778,7 @@ function KpiCard({ label, value, accent, icon, tag }) {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = {
   page: {
     background: "#f8fafc",

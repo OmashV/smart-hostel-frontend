@@ -1,7 +1,13 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+<<<<<<< HEAD
 
 import Layout from "./components/Layout";
 
+=======
+import FloatingDashboardChatbot from "./components/FloatingDashboardChatbot";
+import Layout from "./components/Layout";
+import { ChatbotProvider } from "./context/ChatbotContext";
+>>>>>>> main
 import OwnerDashboard from "./pages/OwnerDashboard";
 import WardenDashboard from "./pages/WardenDashboard";
 import SecurityDashboard from "./pages/SecurityDashboard";
@@ -15,6 +21,7 @@ import StudentAlertsPage from "./features/student/pages/StudentAlertsPage";
 
 export default function App() {
   return (
+<<<<<<< HEAD
     <Layout>
       <Routes>
         <Route path="/" element={<Navigate to="/owner" replace />} />
@@ -31,5 +38,19 @@ export default function App() {
         </Route>
       </Routes>
     </Layout>
+=======
+    <ChatbotProvider>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Navigate to="/owner" replace />} />
+          <Route path="/owner" element={<OwnerDashboard />} />
+          <Route path="/warden" element={<WardenDashboard />} />
+          <Route path="/security" element={<SecurityDashboard />} />
+          <Route path="/student" element={<StudentDashboard />} />
+        </Routes>
+      </Layout>
+      <FloatingDashboardChatbot />
+    </ChatbotProvider>
+>>>>>>> main
   );
 }

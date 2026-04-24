@@ -33,6 +33,13 @@ export async function getOwnerRoomsOverview(floorId) {
   return data;
 }
 
+export async function getOwnerOverviewSnapshot(floorId = "all") {
+  const { data } = await api.get("/rooms/owner/overview-snapshot", {
+    params: { floorId }
+  });
+  return data;
+}
+
 export async function getOwnerRoomComparison() {
   const { data } = await api.get(`/rooms/owner/room-comparison`);
   return data;
@@ -101,6 +108,12 @@ export async function getTopWasteDays(roomId = "A101", limit = 5) {
   const { data } = await api.get(`/rooms/${roomId}/energy/top-waste-days?limit=${limit}`);
   return data;
 }
+
+export async function chatWithDashboardAgent(payload) {
+  const { data } = await api.post("/chat", payload);
+  return data;
+}
+
 export async function getWardenSummary() {
   const { data } = await api.get(`/rooms/warden/summary`);
   return data;
@@ -123,6 +136,15 @@ export async function getWardenInspectionQueue() {
 
 export async function getWardenNoiseTrend(days = 7) {
   const { data } = await api.get(`/rooms/warden/noise-trend?days=${days}`);
+  return data;
+}
+export async function getWardenHistory(days = 7, roomId = "All") {
+  const query =
+    roomId && roomId !== "All"
+      ? `/rooms/warden/history?days=${days}&roomId=${roomId}`
+      : `/rooms/warden/history?days=${days}`;
+
+  const { data } = await api.get(query);
   return data;
 }
 
