@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export const api = axios.create({
+const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL
 });
 
@@ -114,13 +114,13 @@ export async function chatWithDashboardAgent(payload) {
   return data;
 }
 
-export async function getWardenSummary() {
-  const { data } = await api.get(`/rooms/warden/summary`);
+export async function getWardenSummary(roomId = "All") {
+  const { data } = await api.get(`/rooms/warden/summary`, { params: { roomId } });
   return data;
 }
 
-export async function getWardenRoomsStatus() {
-  const { data } = await api.get(`/rooms/warden/rooms-status`);
+export async function getWardenRoomsStatus(roomId = "All") {
+  const { data } = await api.get(`/rooms/warden/rooms-status`, { params: { roomId } });
   return data;
 }
 
@@ -138,58 +138,19 @@ export async function getWardenNoiseTrend(days = 7) {
   const { data } = await api.get(`/rooms/warden/noise-trend?days=${days}`);
   return data;
 }
-export async function getWardenHistory(days = 7, roomId = "All") {
-  const query =
-    roomId && roomId !== "All"
-      ? `/rooms/warden/history?days=${days}&roomId=${roomId}`
-      : `/rooms/warden/history?days=${days}`;
 
-  const { data } = await api.get(query);
+export async function getSecuritySummary() {
+  const { data } = await api.get(`/rooms/security/summary`);
   return data;
 }
 
-export async function getSecuritySummary(roomId) {
-  const { data } = await api.get(`/rooms/security/summary`, {
-    params: roomId ? { roomId } : {}
-  });
+export async function getSecuritySuspiciousRooms() {
+  const { data } = await api.get(`/rooms/security/suspicious-rooms`);
   return data;
 }
 
-export async function getSecuritySuspiciousRooms(roomId) {
-  const { data } = await api.get(`/rooms/security/suspicious-rooms`, {
-    params: roomId ? { roomId } : {}
-  });
-  return data;
-}
-
-export async function getSecurityDoorEvents(roomId, limit = 50) {
-  const { data } = await api.get(`/rooms/security/door-events`, {
-    params: {
-      ...(roomId ? { roomId } : {}),
-      limit
-    }
-  });
-  return data;
-}
-
-
-export async function getSecurityTrend(roomId, limit = 200) {
-  const { data } = await api.get(`/rooms/security/trend`, {
-    params: {
-      ...(roomId ? { roomId } : {}),
-      limit
-    }
-  });
-  return data;
-}
-
-export async function getSecurityAnomalies(roomId, limit = 50) {
-  const { data } = await api.get(`/rooms/security/anomalies`, {
-    params: {
-      ...(roomId ? { roomId } : {}),
-      limit
-    }
-  });
+export async function getSecurityDoorEvents(limit = 50) {
+  const { data } = await api.get(`/rooms/security/door-events?limit=${limit}`);
   return data;
 }
 
@@ -213,18 +174,36 @@ export async function getWardenFeatureImportance() {
   return res.data;
 }
 
-export async function getWardenAnomalies() {
-  const res = await api.get("/rooms/warden/anomalies");
+export async function getWardenAnomalies(roomId = "All") {
+  const res = await api.get("/rooms/warden/anomalies", { params: { roomId } });
   return res.data;
 }
 
-export async function getWardenPatterns() {
-  const res = await api.get("/rooms/warden/patterns");
+export async function getWardenPatterns(roomId = "All") {
+  const res = await api.get("/rooms/warden/patterns", { params: { roomId } });
   return res.data;
 }
 
-export async function getWardenForecasts() {
-  const res = await api.get("/rooms/warden/forecasts");
+export async function getWardenForecasts(roomId = "All") {
+  const res = await api.get("/rooms/warden/forecasts", { params: { roomId } });
   return res.data;
 }
 
+function roomParams(roomId = "All", extra = {}) {
+  return { params: { roomId, ...extra } };
+}
+
+export async function getWardenMlAlerts(roomId = "All") {
+  const { data } = await api.get(`/rooms/warden/ml-alerts`, roomParams(roomId));
+  return data;
+}
+
+export async function getWardenHistory(roomId = "All", days = 7) {
+  const { data } = await api.get(`/rooms/warden/history`, roomParams(roomId, { days }));
+  return data;
+}
+
+export async function getWardenDataRange(roomId = "All") {
+  const { data } = await api.get(`/rooms/warden/data-range`, roomParams(roomId));
+  return data;
+}
