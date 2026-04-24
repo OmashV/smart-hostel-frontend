@@ -32,6 +32,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
           </button>
         </div>
 
+
         <nav className="nav-list">
           {items.map((item) => (
             <NavLink
