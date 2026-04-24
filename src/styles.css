@@ -1723,3 +1723,115 @@ body {
   color: #0f172a;
   margin: 0;
 }
+
+/* Floating Warden Chat Assistant */
+.warden-floating-chat-button {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  width: 62px;
+  height: 62px;
+  border: none;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 18px 36px rgba(37, 99, 235, 0.35);
+  cursor: pointer;
+  z-index: 80;
+}
+
+.warden-chat-backdrop {
+  position: fixed;
+  inset: 0;
+  border: none;
+  background: rgba(15, 23, 42, 0.28);
+  z-index: 81;
+}
+
+.warden-chat-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(420px, 94vw);
+  height: 100vh;
+  background: #ffffff;
+  box-shadow: -20px 0 45px rgba(15, 23, 42, 0.18);
+  transform: translateX(105%);
+  transition: transform 0.24s ease;
+  z-index: 82;
+  display: flex;
+  flex-direction: column;
+}
+
+.warden-chat-drawer.open {
+  transform: translateX(0);
+}
+
+.warden-chat-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 22px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.warden-chat-drawer-head h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.warden-chat-drawer-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.warden-chat-drawer-head button {
+  border: none;
+  background: #e2e8f0;
+  color: #0f172a;
+  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.warden-chat-drawer-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.warden-chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.warden-chat-suggestions button {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.room-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.tile-dot.red { background: #ef4444; }
