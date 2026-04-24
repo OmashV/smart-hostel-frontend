@@ -242,6 +242,7 @@ export default function WardenDashboard() {
   const [wardenPatterns, setWardenPatterns] = useState([]);
   const [wardenFeatureImportance, setWardenFeatureImportance] = useState([]);
   const [wardenHistory, setWardenHistory] = useState([]);
+  const [lastRefreshAt, setLastRefreshAt] = useState(new Date());
   const selectedRoomFilterRef = useRef(selectedRoomFilter);
 
   useEffect(() => { selectedRoomFilterRef.current = selectedRoomFilter; }, [selectedRoomFilter]);
@@ -295,6 +296,7 @@ export default function WardenDashboard() {
       setWardenPatterns(patternRes?.items || []);
       setWardenFeatureImportance(featureImportanceRes?.items || []);
       setWardenHistory(historyRes?.items || historyRes?.history || []);
+      setLastRefreshAt(new Date());
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load warden dashboard data.");
     } finally {
@@ -397,34 +399,62 @@ export default function WardenDashboard() {
 
 
   const recentHistoryRows = useMemo(() => {
-    const historyRows = (wardenHistory || []).map((item) => ({
-      room_id: item.room_id || selectedRoomFilter || "All",
-      date: item.date,
-      occupied_count: Number(item.occupied_count || 0),
-      empty_count: Number(item.empty_count || 0),
-      warning_count: Number(item.warning_count || 0),
-      violation_count: Number(item.violation_count || 0),
-      inspection_count: Number(item.inspection_count || 0),
-      avg_sound_peak: Number(item.avg_sound_peak || 0),
-      source: item.source || item.source_type || "MongoDB summary"
-    }));
+    const refreshStamp = lastRefreshAt instanceof Date ? lastRefreshAt : new Date(lastRefreshAt);
 
-    const liveRoomRows = (rooms || []).map((room) => ({
-      room_id: room.room_id,
-      date: room.captured_at ? formatDate(room.captured_at) : "Live status",
-      occupied_count: room.occupancy_stat || "-",
-      empty_count: String(room.occupancy_stat || "").toLowerCase() === "empty" ? 1 : 0,
-      warning_count: room.noise_stat || "-",
-      violation_count: room.needs_inspection ? 1 : 0,
-      inspection_count: room.needs_inspection ? 1 : 0,
-      avg_sound_peak: Number(room.sound_peak || 0),
-      source: "Latest sensor status"
-    }));
+    const toDateTimeParts = (value, fallbackTime = "23:59:59") => {
+      if (!value) return { sortKey: 0, date: "-", time: "-" };
+      const raw = String(value);
+      const parsed = raw.includes("T") || raw.includes(":") ? new Date(raw) : new Date(`${raw}T${fallbackTime}`);
+      if (Number.isNaN(parsed.getTime())) return { sortKey: 0, date: raw, time: fallbackTime };
+      return {
+        sortKey: parsed.getTime(),
+        date: parsed.toLocaleDateString(),
+        time: parsed.toLocaleTimeString()
+      };
+    };
+
+    const historyRows = (wardenHistory || []).map((item) => {
+      const stamp = toDateTimeParts(item.captured_at || item.timestamp || item.datetime || item.date);
+      return {
+        room_id: item.room_id || selectedRoomFilter || "All",
+        date: stamp.date,
+        time: stamp.time,
+        sortKey: stamp.sortKey,
+        occupied_count: Number(item.occupied_count || 0),
+        empty_count: Number(item.empty_count || 0),
+        warning_count: Number(item.warning_count || 0),
+        violation_count: Number(item.violation_count || 0),
+        inspection_count: Number(item.inspection_count || 0),
+        avg_sound_peak: Number(item.avg_sound_peak || 0),
+        source: item.source || item.source_type || "MongoDB summary"
+      };
+    });
+
+    const liveRoomRows = (rooms || []).map((room) => {
+      const stamp = room.captured_at ? toDateTimeParts(room.captured_at) : {
+        sortKey: refreshStamp.getTime(),
+        date: refreshStamp.toLocaleDateString(),
+        time: refreshStamp.toLocaleTimeString()
+      };
+      return {
+        room_id: room.room_id,
+        date: stamp.date,
+        time: stamp.time,
+        sortKey: stamp.sortKey,
+        occupied_count: room.occupancy_stat || "-",
+        empty_count: String(room.occupancy_stat || "").toLowerCase() === "empty" ? 1 : 0,
+        warning_count: room.noise_stat || "-",
+        violation_count: room.needs_inspection ? 1 : 0,
+        inspection_count: room.needs_inspection ? 1 : 0,
+        avg_sound_peak: Number(room.sound_peak || 0),
+        source: room.captured_at ? "Latest sensor status" : "Live 8-second refresh"
+      };
+    });
 
     return [...liveRoomRows, ...historyRows]
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+      .sort((a, b) => Number(b.sortKey || 0) - Number(a.sortKey || 0))
       .slice(0, 12);
-  }, [wardenHistory, rooms, selectedRoomFilter]);
+  }, [wardenHistory, rooms, selectedRoomFilter, lastRefreshAt]);
 
   const generatedInsights = useMemo(() => {
     const highestRiskPattern = [...patternRows].sort((a, b) => Number(b.avg_critical_ratio || 0) - Number(a.avg_critical_ratio || 0))[0];
@@ -519,12 +549,20 @@ export default function WardenDashboard() {
       </div>
 
       {!isSingleRoom ? (
-        <SectionCard title="Recent History">
+        <SectionCard title="Recent Live History">
+          <div className="warden-live-history-head">
+            <div>
+              <strong>Auto-updating activity feed</strong>
+              <p>Shows latest room status plus recent MongoDB summary records.</p>
+            </div>
+            <span>Refreshes every 8s · Last update {lastRefreshAt.toLocaleTimeString()}</span>
+          </div>
           {recentHistoryRows.length ? (
             <DataTable
               columns={[
                 { key: "room_id", label: "Room" },
-                { key: "date", label: "Time / Date" },
+                { key: "date", label: "Date" },
+                { key: "time", label: "Time" },
                 { key: "occupied_count", label: "Occupancy / Occupied" },
                 { key: "warning_count", label: "Noise / Warnings", render: (row) => typeof row.warning_count === "string" ? <HistoryWord value={row.warning_count} /> : row.warning_count },
                 { key: "violation_count", label: "Critical / Inspection" },
@@ -560,12 +598,15 @@ export default function WardenDashboard() {
         </div>
 
         <SectionCard title="Insight Generation">
-          <div className="warden-insight-generation-list">
-            {generatedInsights.map((insight) => (
-              <div className="warden-insight-generation-card" key={insight.title}>
-                <span>{insight.title}</span>
-                <strong>{insight.value}</strong>
-                <p>{insight.detail}</p>
+          <div className="warden-insight-stack">
+            {generatedInsights.map((insight, index) => (
+              <div className="warden-insight-step" key={insight.title}>
+                <div className="warden-insight-index">{index + 1}</div>
+                <div className="warden-insight-body">
+                  <span>{insight.title}</span>
+                  <strong>{insight.value}</strong>
+                  <p>{insight.detail}</p>
+                </div>
               </div>
             ))}
           </div>
