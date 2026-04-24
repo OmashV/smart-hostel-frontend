@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { HiOutlineChatBubbleLeftRight } from "react-icons/hi2";
 import { chatWithDashboardAgent } from "../api/client";
 import { useChatbotContext } from "../context/ChatbotContext";
 
@@ -9,8 +10,7 @@ export default function FloatingDashboardChatbot() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content:
-        "Hi - ask me about energy waste, floors, rooms, alerts, trends, forecasts, or the chart you are viewing."
+      content: "Ask about this dashboard."
     }
   ]);
   const [input, setInput] = useState("");
@@ -25,6 +25,7 @@ export default function FloatingDashboardChatbot() {
     selectedFilters: {}
   };
   const onAction = chatConfig?.onAction || null;
+  const selectedVisual = dashboardState?.selectedVisual || null;
 
   const title = useMemo(() => {
     switch (role) {
@@ -135,7 +136,6 @@ export default function FloatingDashboardChatbot() {
   };
 
   const sendExplainVisual = async () => {
-    const selectedVisual = dashboardState?.selectedVisual;
     if (!selectedVisual || loading) return;
 
     const userMessage = `Explain the currently selected visual: ${selectedVisual.title}`;
@@ -162,12 +162,15 @@ export default function FloatingDashboardChatbot() {
       {isOpen && (
         <div className="floating-chatbot-panel">
           <div className="floating-chatbot-header">
-            <div>
-              <strong>{title}</strong>
-              <div className="floating-chatbot-subtitle">
-                Dashboard: {dashboardState?.dashboard || "-"} | Floor:{" "}
-                {dashboardState?.floorId || "all"} | Room:{" "}
-                {dashboardState?.roomId || "all"}
+            <div className="floating-chatbot-title-wrap">
+              <span className="floating-chatbot-status-dot" aria-hidden="true" />
+              <div>
+                <strong>{title}</strong>
+                <div className="floating-chatbot-subtitle">
+                  Dashboard: {dashboardState?.dashboard || "-"} | Floor:{" "}
+                  {dashboardState?.floorId || "all"} | Room:{" "}
+                  {dashboardState?.roomId || "all"}
+                </div>
               </div>
             </div>
 
@@ -175,19 +178,20 @@ export default function FloatingDashboardChatbot() {
               type="button"
               className="floating-chatbot-close"
               onClick={() => setIsOpen(false)}
+              aria-label="Close chatbot"
             >
-              ×
+              x
             </button>
           </div>
 
-          {dashboardState?.selectedVisual && (
+          {selectedVisual && (
             <button
               type="button"
               className="floating-chatbot-quick-btn"
               onClick={sendExplainVisual}
               disabled={loading}
             >
-              Explain {dashboardState.selectedVisual.shortLabel || "Selected Visual"}
+              Explain {selectedVisual.shortLabel || "Selected Visual"}
             </button>
           )}
 
@@ -203,7 +207,7 @@ export default function FloatingDashboardChatbot() {
             <input
               type="text"
               value={input}
-              placeholder="Ask about this dashboard..."
+              placeholder="Ask a question..."
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -225,7 +229,7 @@ export default function FloatingDashboardChatbot() {
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label="Open chatbot"
       >
-        💬
+        <HiOutlineChatBubbleLeftRight />
       </button>
     </>
   );
