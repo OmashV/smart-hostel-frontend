@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -19,16 +21,17 @@ import {
 } from "react-icons/hi2";
 
 import {
+  getAvailableFloors,
+  getAvailableRooms,
   getEnergyForecast,
-  getEnergyHistory,
-  getOwnerAlerts,
+  getOwnerOverviewSnapshot,
   resolveOwnerAlert,
   deleteOwnerAlert,
   getOwnerAnomalies,
   getOwnerWeekdayPatterns,
   getOwnerKpis,
   getOwnerPatterns,
-  getOwnerRoomsOverview
+  getTopWasteDays
 } from "../api/client";
 import { mergeHistoryWithForecast } from "../utils/chart";
 import { formatDate, formatKwh } from "../utils/format";
@@ -37,6 +40,7 @@ import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import LoadingState from "../components/LoadingState";
 import StatusBadge from "../components/StatusBadge";
+import { useChatbotContext } from "../context/ChatbotContext";
 
 function AlertCard({ alert, onResolve, onDelete }) {
   const cls =
@@ -90,6 +94,20 @@ function AlertCard({ alert, onResolve, onDelete }) {
       </div>
     </div>
   );
+}
+
+function deriveFloorIdFromRoom(roomId = "") {
+  const clean = String(roomId).trim().toUpperCase();
+
+  if (/^[A-Z]1\d{2}$/.test(clean)) {
+    return `${clean[0]}-Floor-1`;
+  }
+
+  if (/^[A-Z]2\d{2}$/.test(clean)) {
+    return `${clean[0]}-Floor-2`;
+  }
+
+  return "Unknown Floor";
 }
 
 function OwnerRoomTile({ room }) {
@@ -159,13 +177,9 @@ function OwnerRoomTile({ room }) {
 }
 
 export default function OwnerDashboard() {
-  const [roomId, setRoomId] = useState(() => {
-    try {
-      return localStorage.getItem("smart-hostel.owner.roomId") || "all";
-    } catch {
-      return "all";
-    }
-  });
+  const { registerChatContext, clearChatContext } = useChatbotContext();
+  const [floorId, setFloorId] = useState("all");
+  const [roomId, setRoomId] = useState("all");
   const [forecastDays, setForecastDays] = useState(() => {
     try {
       const raw = Number(localStorage.getItem("smart-hostel.owner.forecastDays"));
@@ -175,6 +189,8 @@ export default function OwnerDashboard() {
     }
   });
   const [loading, setLoading] = useState(true);
+  const [availableFloors, setAvailableFloors] = useState([]);
+  const [availableRooms, setAvailableRooms] = useState([]);
 
   const [kpis, setKpis] = useState(null);
   const [roomsOverview, setRoomsOverview] = useState([]);
@@ -182,6 +198,7 @@ export default function OwnerDashboard() {
 
   const [history, setHistory] = useState([]);
   const [forecast, setForecast] = useState([]);
+  const [topWasteDays, setTopWasteDays] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
   const [patterns, setPatterns] = useState([]);
   const [weekdayPatterns, setWeekdayPatterns] = useState([]);
@@ -194,14 +211,6 @@ export default function OwnerDashboard() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("smart-hostel.owner.roomId", roomId);
-    } catch {
-      // Ignore persistence failures.
-    }
-  }, [roomId]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem("smart-hostel.owner.forecastDays", String(forecastDays));
     } catch {
       // Ignore persistence failures.
@@ -209,108 +218,133 @@ export default function OwnerDashboard() {
   }, [forecastDays]);
 
   useEffect(() => {
-    let liveInterval;
-    let analyticsInterval;
-
-    async function loadAllRoomsView() {
+    async function loadFloors() {
       try {
-        const [overviewRes, alertsRes] = await Promise.all([
-          getOwnerRoomsOverview(),
-          getOwnerAlerts().catch(() => ({ alerts: [] }))
-        ]);
-    
-        const rooms = overviewRes.rooms || [];
-        const liveAlerts = alertsRes.alerts || [];
-    
-        setRoomsOverview(rooms);
-        setAlerts(liveAlerts);
-    
-        const totalEnergy = rooms.reduce(
-          (sum, r) => sum + Number(r.total_energy_kwh || 0),
-          0
+        const res = await getAvailableFloors();
+        setAvailableFloors(res.floors || []);
+      } catch (error) {
+        console.error("Failed to load floors:", error);
+        setAvailableFloors([]);
+      }
+    }
+
+    loadFloors();
+  }, []);
+
+  useEffect(() => {
+    async function loadRooms() {
+      try {
+        const res = await getAvailableRooms(floorId);
+        const rooms = res.rooms || [];
+        setAvailableRooms(rooms);
+
+        setRoomId((currentRoomId) =>
+          currentRoomId !== "all" && !rooms.includes(currentRoomId)
+            ? "all"
+            : currentRoomId
         );
-        const wastedEnergy = rooms.reduce(
-          (sum, r) => sum + Number(r.wasted_energy_kwh || 0),
-          0
-        );
-        const wasteRatio =
-          totalEnergy > 0
-            ? Number(((wastedEnergy / totalEnergy) * 100).toFixed(2))
-            : 0;
-        const highWasteRooms = rooms.filter(
-          (r) => r.waste_stat === "Critical"
-        ).length;
-    
-        setKpis({
-          total_energy_today_kwh: totalEnergy,
-          wasted_energy_today_kwh: wastedEnergy,
-          waste_ratio_today_percent: wasteRatio,
-          current_waste_status: `${highWasteRooms} High Waste Rooms`
-        });
       } catch (error) {
-        console.error("All rooms refresh failed:", error);
-      } finally {
-        setLoading(false);
+        console.error("Failed to load rooms:", error);
+        setAvailableRooms([]);
       }
     }
 
-    async function loadSingleRoomLive() {
-      try {
-        const [kpiRes, historyRes] = await Promise.all([
-          getOwnerKpis(roomId),
-          getEnergyHistory(roomId)
-        ]);
+    loadRooms();
+  }, [floorId]);
 
-        setKpis(kpiRes);
-        setHistory(historyRes.history || []);
-        setRoomsOverview([]);
-        setAlerts([]);
-      } catch (error) {
-        console.error("Single room live refresh failed:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    async function loadSingleRoomAnalytics() {
-      try {
-        const [forecastRes, anomalyRes, patternRes, weekdayRes] = await Promise.all([
-          getEnergyForecast(roomId, forecastDays).catch(() => ({
-            history: [],
-            forecast: []
-          })),
-          getOwnerAnomalies(roomId).catch(() => ({ items: [] })),
-          getOwnerPatterns().catch(() => ({ items: [] })),
-          getOwnerWeekdayPatterns(roomId).catch(() => ({ items: [] }))
-        ]);
-    
-        setForecast(forecastRes.forecast || []);
-        setAnomalies(anomalyRes.items || []);
-        setPatterns(patternRes.items || []);
-        setWeekdayPatterns(weekdayRes.items || []);
-      } catch (error) {
-        console.error("Single room analytics refresh failed:", error);
-      }
-    }
-
+  const loadAllRoomsView = useCallback(async () => {
     setLoading(true);
+    try {
+      const overviewRes = await getOwnerOverviewSnapshot(floorId);
+
+      setKpis(
+        overviewRes.kpis || {
+          total_energy_today_kwh: 0,
+          wasted_energy_today_kwh: 0,
+          waste_ratio_today_percent: 0,
+          current_waste_status: "No Data"
+        }
+      );
+
+      setRoomsOverview(overviewRes.rooms || []);
+      setAlerts(overviewRes.alerts || []);
+
+      setHistory([]);
+      setForecast([]);
+      setTopWasteDays([]);
+      setSelectedDay(null);
+      setAnomalies([]);
+      setPatterns([]);
+      setWeekdayPatterns([]);
+    } catch (error) {
+      console.error("Failed to load overview snapshot:", error);
+
+      setKpis({
+        total_energy_today_kwh: 0,
+        wasted_energy_today_kwh: 0,
+        waste_ratio_today_percent: 0,
+        current_waste_status: "No Data"
+      });
+      setRoomsOverview([]);
+      setAlerts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [floorId]);
+
+  const loadSingleRoomView = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [
+        kpiRes,
+        forecastRes,
+        topWasteRes,
+        anomalyRes,
+        patternRes,
+        weekdayRes
+      ] = await Promise.all([
+        getOwnerKpis(roomId),
+        getEnergyForecast(roomId, forecastDays).catch(() => ({
+          history: [],
+          forecast: []
+        })),
+        getTopWasteDays(roomId, 31).catch(() => ({ days: [] })),
+        getOwnerAnomalies(roomId).catch(() => ({ items: [] })),
+        getOwnerPatterns().catch(() => ({ items: [] })),
+        getOwnerWeekdayPatterns(roomId).catch(() => ({ items: [] }))
+      ]);
+
+      setKpis(kpiRes);
+      setHistory(forecastRes.history || []);
+      setForecast(forecastRes.forecast || []);
+      setTopWasteDays(topWasteRes.days || []);
+      setAnomalies(anomalyRes.items || []);
+      setPatterns(patternRes.items || []);
+      setWeekdayPatterns(weekdayRes.items || []);
+      setRoomsOverview([]);
+      setAlerts([]);
+    } catch (error) {
+      console.error("Single room refresh failed:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [forecastDays, roomId]);
+
+  useEffect(() => {
+    console.log("Dashboard branch:", { floorId, roomId });
 
     if (roomId === "all") {
-      loadAllRoomsView();
-      liveInterval = setInterval(loadAllRoomsView, 10000);
+      console.log("Running loadAllRoomsView");
+      queueMicrotask(() => {
+        loadAllRoomsView();
+      });
     } else {
-      loadSingleRoomLive();
-      loadSingleRoomAnalytics();
-
-      liveInterval = setInterval(loadSingleRoomLive, 10000);
-      analyticsInterval = setInterval(loadSingleRoomAnalytics, 60000);
+      console.log("Running loadSingleRoomView");
+      queueMicrotask(() => {
+        loadSingleRoomView();
+      });
     }
-
-    return () => {
-      if (liveInterval) clearInterval(liveInterval);
-      if (analyticsInterval) clearInterval(analyticsInterval);
-    };
-  }, [roomId, forecastDays]);
+  }, [floorId, roomId, forecastDays, loadAllRoomsView, loadSingleRoomView]);
 
   useEffect(() => {
     if (roomId === "all" || !history.length) return;
@@ -319,17 +353,18 @@ export default function OwnerDashboard() {
     const latestDate = new Date(latest.date);
 
     if (!Number.isNaN(latestDate.getTime())) {
-      setCalendarMonth(
-        new Date(latestDate.getFullYear(), latestDate.getMonth(), 1)
-      );
-
       const key = `${latestDate.getFullYear()}-${String(
         latestDate.getMonth() + 1
       ).padStart(2, "0")}-${String(latestDate.getDate()).padStart(2, "0")}`;
 
-      setSelectedDay({
-        ...latest,
-        date: key
+      queueMicrotask(() => {
+        setCalendarMonth(
+          new Date(latestDate.getFullYear(), latestDate.getMonth(), 1)
+        );
+        setSelectedDay({
+          ...latest,
+          date: key
+        });
       });
     }
   }, [history, roomId]);
@@ -381,7 +416,7 @@ export default function OwnerDashboard() {
         ? "normal"
         : "";
 
-    return history.reduce((acc, item) => {
+    const mappedHistory = history.reduce((acc, item) => {
       const key = toDateKey(item.date);
       if (!key) return acc;
 
@@ -432,7 +467,30 @@ export default function OwnerDashboard() {
 
       return acc;
     }, {});
-  }, [history, kpis, patternByDate]);
+
+    topWasteDays.forEach((item) => {
+      const key = toDateKey(item.date);
+      if (!key || mappedHistory[key]) return;
+
+      const total = Number(item.total_energy_kwh || 0);
+      const waste = Number(item.wasted_energy_kwh || 0);
+      const ratio =
+        item.waste_ratio_percent !== undefined && item.waste_ratio_percent !== null
+          ? Number(Number(item.waste_ratio_percent).toFixed(2))
+          : total > 0
+          ? Number(((waste / total) * 100).toFixed(2))
+          : 0;
+
+      mappedHistory[key] = {
+        ...item,
+        date: key,
+        waste_ratio_percent: ratio,
+        waste_status: ratio >= 30 ? "critical" : ratio >= 15 ? "warning" : "normal"
+      };
+    });
+
+    return mappedHistory;
+  }, [history, kpis, patternByDate, topWasteDays]);
 
   const calendarDays = useMemo(() => {
     const year = calendarMonth.getFullYear();
@@ -529,6 +587,67 @@ export default function OwnerDashboard() {
     return "Normal";
   }, [kpis, resolvedWasteRatio]);
 
+  const overviewComparison = useMemo(() => {
+    if (roomId !== "all") {
+      return {
+        title: "Room Overview",
+        mode: "single-room",
+        data: []
+      };
+    }
+
+    const normalizedRooms = (roomsOverview || []).map((room) => ({
+      ...room,
+      floor_id: room.floor_id || deriveFloorIdFromRoom(room.room_id),
+      total_energy_kwh: Number(room.total_energy_kwh || 0),
+      wasted_energy_kwh: Number(room.wasted_energy_kwh || 0)
+    }));
+
+    if (floorId === "all") {
+      const grouped = normalizedRooms.reduce((acc, room) => {
+        const key = room.floor_id || "Unknown Floor";
+
+        if (!acc[key]) {
+          acc[key] = {
+            key,
+            name: key,
+            total_energy_kwh: 0,
+            wasted_energy_kwh: 0,
+            room_count: 0
+          };
+        }
+
+        acc[key].total_energy_kwh += room.total_energy_kwh;
+        acc[key].wasted_energy_kwh += room.wasted_energy_kwh;
+        acc[key].room_count += 1;
+
+        return acc;
+      }, {});
+
+      return {
+        title: "Floor-wise Energy Comparison",
+        mode: "floor",
+        data: Object.values(grouped)
+      };
+    }
+
+    const filteredRooms = normalizedRooms.filter(
+      (room) => room.floor_id === floorId
+    );
+
+    return {
+      title: `${floorId} Room-wise Energy Comparison`,
+      mode: "room",
+      data: filteredRooms.map((room) => ({
+        key: room.room_id,
+        name: room.room_id,
+        total_energy_kwh: room.total_energy_kwh,
+        wasted_energy_kwh: room.wasted_energy_kwh,
+        waste_ratio_percent: Number(room.waste_ratio_percent || 0)
+      }))
+    };
+  }, [roomsOverview, floorId, roomId]);
+
   const handleResolveAlert = async (alertId) => {
     try {
       await resolveOwnerAlert(alertId);
@@ -547,45 +666,68 @@ export default function OwnerDashboard() {
     }
   };
 
-  const patternSummary = useMemo(() => {
-    if (!patterns.length) {
-      return {
-        latestPattern: "-",
-        mostCommonPattern: "-",
-        highWasteDays: 0,
-        efficientDays: 0
-      };
+  const handleOverviewChartClick = (state) => {
+    const payload = state?.activePayload?.[0]?.payload;
+    if (!payload) return;
+
+    if (roomId !== "all") return;
+
+    if (floorId === "all") {
+      setFloorId(payload.key);
+      setRoomId("all");
+      return;
     }
-  
-    const sorted = [...patterns].sort((a, b) => b.date.localeCompare(a.date));
-    const latestPattern = sorted[0]?.pattern_name || "-";
-  
-    const counts = patterns.reduce((acc, item) => {
-      const key = item.pattern_name || "Unknown";
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
-  
-    const mostCommonPattern =
-      Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
-  
-    return {
-      latestPattern,
-      mostCommonPattern,
-      highWasteDays: counts["High Waste Pattern"] || 0,
-      efficientDays: counts["Efficient Usage"] || 0
+
+    setRoomId(payload.key);
+  };
+
+  const handleChatActions = useCallback((actions) => {
+    actions.forEach((action) => {
+      if (action.type === "switch_floor") {
+        setFloorId(action.value);
+        setRoomId("all");
+      }
+
+      if (action.type === "switch_room") {
+        setRoomId(action.value);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    registerChatContext({
+      role: "owner",
+      dashboardState: {
+        floorId,
+        roomId
+      },
+      onAction: handleChatActions
+    });
+
+    return () => {
+      clearChatContext();
     };
-  }, [patterns]);
+  }, [
+    floorId,
+    roomId,
+    handleChatActions,
+    registerChatContext,
+    clearChatContext
+  ]);
 
   if (loading) return <LoadingState />;
 
   return (
     <div className="page-grid owner-dashboard">
       <FilterBar
+        floorId={floorId}
+        setFloorId={setFloorId}
         roomId={roomId}
         setRoomId={setRoomId}
         forecastDays={forecastDays}
         setForecastDays={setForecastDays}
+        availableFloors={availableFloors}
+        availableRooms={availableRooms}
       />
 
       <div className="stats-grid">
@@ -623,11 +765,92 @@ export default function OwnerDashboard() {
       {roomId === "all" ? (
         <div className="owner-top-grid">
           <SectionCard title="Room Overview">
-            <div className="owner-room-grid">
-              {roomsOverview.map((room) => (
-                <OwnerRoomTile key={room.room_id} room={room} />
-              ))}
-            </div>
+            {overviewComparison.data.length ? (
+              <>
+                <div
+                  style={{
+                    marginBottom: "10px",
+                    color: "#64748b",
+                    fontSize: "14px"
+                  }}
+                >
+                  {floorId === "all"
+                    ? "Comparing total energy and wasted energy across floors. Click a bar to drill into a floor."
+                    : "Comparing total energy and wasted energy across rooms in the selected floor. Click a bar to drill into a room."}
+                </div>
+
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart
+                    data={overviewComparison.data}
+                    onClick={handleOverviewChartClick}
+                    margin={{ top: 12, right: 18, left: 0, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "#64748b", fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#ffffff",
+                        border: "1px solid #dbe2ea",
+                        borderRadius: "12px",
+                        color: "#172033",
+                        boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
+                      }}
+                      formatter={(value, name) => [
+                        `${Number(value || 0).toFixed(2)} kWh`,
+                        name === "total_energy_kwh"
+                          ? "Total Energy"
+                          : "Wasted Energy"
+                      ]}
+                    />
+                    <Legend
+                      formatter={(value) =>
+                        value === "total_energy_kwh"
+                          ? "Total Energy"
+                          : "Wasted Energy"
+                      }
+                    />
+                    <Bar
+                      dataKey="total_energy_kwh"
+                      name="total_energy_kwh"
+                      fill="#3b82f6"
+                      radius={[8, 8, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="wasted_energy_kwh"
+                      name="wasted_energy_kwh"
+                      fill="#f59e0b"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+
+                {roomId === "all" && roomsOverview.length > 0 && (
+                  <div style={{ marginTop: "18px" }} className="owner-room-grid">
+                    {roomsOverview.map((room) => (
+                      <OwnerRoomTile key={room.room_id} room={room} />
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : roomId === "all" && roomsOverview.length > 0 ? (
+              <div className="owner-room-grid">
+                {roomsOverview.map((room) => (
+                  <OwnerRoomTile key={room.room_id} room={room} />
+                ))}
+              </div>
+            ) : (
+              <p>No overview data available.</p>
+            )}
           </SectionCard>
 
           <SectionCard title="Active Alerts">

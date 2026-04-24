@@ -4,13 +4,39 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL
 });
 
+export async function getAvailableFloors() {
+  const { data } = await api.get("/rooms/available-floors");
+  return data;
+}
+
+export async function getAvailableRooms(floorId) {
+  const { data } = await api.get("/rooms/available-rooms", {
+    params: floorId && floorId !== "all" ? { floorId } : {}
+  });
+  return data;
+}
+
+export async function getFloorOverview() {
+  const { data } = await api.get("/rooms/floors/overview");
+  return data;
+}
+
 export async function getOwnerKpis(roomId = "A101") {
   const { data } = await api.get(`/rooms/${roomId}/owner-kpis`);
   return data;
 }
 
-export async function getOwnerRoomsOverview() {
-  const { data } = await api.get(`/rooms/owner/rooms-overview`);
+export async function getOwnerRoomsOverview(floorId) {
+  const { data } = await api.get("/rooms/owner/rooms-overview", {
+    params: floorId && floorId !== "all" ? { floorId } : {}
+  });
+  return data;
+}
+
+export async function getOwnerOverviewSnapshot(floorId = "all") {
+  const { data } = await api.get("/rooms/owner/overview-snapshot", {
+    params: { floorId }
+  });
   return data;
 }
 
@@ -83,6 +109,11 @@ export async function getTopWasteDays(roomId = "A101", limit = 5) {
   return data;
 }
 
+export async function chatWithDashboardAgent(payload) {
+  const { data } = await api.post("/chat", payload);
+  return data;
+}
+
 export async function getWardenSummary() {
   const { data } = await api.get(`/rooms/warden/summary`);
   return data;
@@ -105,6 +136,15 @@ export async function getWardenInspectionQueue() {
 
 export async function getWardenNoiseTrend(days = 7) {
   const { data } = await api.get(`/rooms/warden/noise-trend?days=${days}`);
+  return data;
+}
+export async function getWardenHistory(days = 7, roomId = "All") {
+  const query =
+    roomId && roomId !== "All"
+      ? `/rooms/warden/history?days=${days}&roomId=${roomId}`
+      : `/rooms/warden/history?days=${days}`;
+
+  const { data } = await api.get(query);
   return data;
 }
 

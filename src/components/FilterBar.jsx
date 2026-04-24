@@ -1,31 +1,54 @@
+import React from "react";
+
 export default function FilterBar({
+  floorId = "all",
+  setFloorId,
   roomId,
   setRoomId,
   forecastDays,
-  setForecastDays
+  setForecastDays,
+  availableFloors = [],
+  availableRooms = []
 }) {
+  const showFloorFilter = typeof setFloorId === "function";
+  const showForecastDays = typeof setForecastDays === "function" && roomId !== "all";
+
   return (
     <div className="filter-bar">
+      {showFloorFilter && (
+        <label>
+          Floor
+          <select value={floorId} onChange={(e) => setFloorId(e.target.value)}>
+            <option value="all">All Floors</option>
+            {availableFloors.map((floor) => (
+              <option key={floor} value={floor}>
+                {floor}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <label>
         Room
         <select value={roomId} onChange={(e) => setRoomId(e.target.value)}>
           <option value="all">All Rooms</option>
-          <option value="A101">A101</option>
-          <option value="A102">A102</option>
-          <option value="A103">A103</option>
-          <option value="A201">A201</option>
-          <option value="A202">A202</option>
-          <option value="A203">A203</option>
+          {availableRooms.map((room) => (
+            <option key={room} value={room}>
+              {room}
+            </option>
+          ))}
         </select>
       </label>
 
-      {setForecastDays && roomId !== "all" && (
+      {showForecastDays && (
         <label>
           Forecast days
           <select
             value={forecastDays}
             onChange={(e) => setForecastDays(Number(e.target.value))}
           >
+            <option value={3}>3</option>
             <option value={5}>5</option>
             <option value={7}>7</option>
           </select>

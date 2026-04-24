@@ -9,6 +9,8 @@ import DataTable from "../components/DataTable";
 import LoadingState from "../components/LoadingState";
 import { formatDate, formatKwh } from "../utils/format";
 
+const STUDENT_ROOMS = ["A101", "A102", "A103", "A201", "A202", "A203"];
+
 export default function StudentDashboard() {
   const [roomId, setRoomId] = useState("A101");
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,11 @@ export default function StudentDashboard() {
 
   return (
     <div className="page-grid">
-      <FilterBar roomId={roomId} setRoomId={setRoomId} />
+      <FilterBar
+        roomId={roomId}
+        setRoomId={setRoomId}
+        availableRooms={STUDENT_ROOMS}
+      />
 
       <div className="stats-grid">
         <StatCard title="My Energy Today" value={formatKwh(overview?.today_energy_kwh)} />
