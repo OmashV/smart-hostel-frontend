@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -177,7 +177,14 @@ function OwnerRoomTile({ room }) {
 }
 
 export default function OwnerDashboard() {
-  const { registerChatContext, clearChatContext } = useChatbotContext();
+  const {
+    registerChatContext,
+    clearChatContext,
+    updateSelectedVisual
+  } = useChatbotContext();
+  const registerChatContextRef = useRef(registerChatContext);
+  const clearChatContextRef = useRef(clearChatContext);
+  const handleChatActionsRef = useRef(null);
   const [floorId, setFloorId] = useState("all");
   const [roomId, setRoomId] = useState("all");
   const [forecastDays, setForecastDays] = useState(() => {
@@ -681,6 +688,17 @@ export default function OwnerDashboard() {
     setRoomId(payload.key);
   };
 
+  const handleHistoryPointSelect = (entry) => {
+    const point = entry?.activePayload?.[0]?.payload;
+    if (!point?.date) return;
+
+    setSelectedDay((prev) => ({
+      ...(prev || {}),
+      ...point,
+      date: point.date
+    }));
+  };
+
   const handleChatActions = useCallback((actions) => {
     actions.forEach((action) => {
       if (action.type === "switch_floor") {
@@ -695,25 +713,31 @@ export default function OwnerDashboard() {
   }, []);
 
   useEffect(() => {
-    registerChatContext({
+    registerChatContextRef.current = registerChatContext;
+    clearChatContextRef.current = clearChatContext;
+    handleChatActionsRef.current = handleChatActions;
+  }, [registerChatContext, clearChatContext, handleChatActions]);
+
+  useEffect(() => {
+    registerChatContextRef.current({
       role: "owner",
       dashboardState: {
+        dashboard: "owner",
         floorId,
-        roomId
+        roomId,
+        selectedFilters: {
+          floorId,
+          roomId,
+          forecastDays
+        }
       },
-      onAction: handleChatActions
+      onAction: handleChatActionsRef.current
     });
 
     return () => {
-      clearChatContext();
+      clearChatContextRef.current();
     };
-  }, [
-    floorId,
-    roomId,
-    handleChatActions,
-    registerChatContext,
-    clearChatContext
-  ]);
+  }, [floorId, roomId, forecastDays]);
 
   if (loading) return <LoadingState />;
 
@@ -731,35 +755,110 @@ export default function OwnerDashboard() {
       />
 
       <div className="stats-grid">
-        <StatCard
-          title="Total Energy Today"
-          value={formatKwh(kpis?.total_energy_today_kwh)}
-          subtitle="Current daily usage"
-          icon={<HiOutlineBolt />}
-          tone="orange"
-        />
-        <StatCard
-          title="Wasted Energy Today"
-          value={formatKwh(kpis?.wasted_energy_today_kwh)}
-          subtitle="Energy lost due to waste"
-          icon={<HiOutlineChartBarSquare />}
-          tone="purple"
-        />
-        <StatCard
-          title="Waste Ratio Today"
-          value={`${resolvedWasteRatio}%`}
-          subtitle="Compared with total usage"
-          icon={<HiOutlineBuildingOffice2 />}
-          tone="green"
-        />
+        <div
+          onMouseEnter={() =>
+            updateSelectedVisual({
+              id: "kpi_total_energy",
+              title: "Total Energy Today",
+              shortLabel: "Total Energy KPI",
+              type: "kpi",
+              description: "Shows the total energy usage for the current dashboard scope.",
+              dataSummary: {
+                value: kpis?.total_energy_today_kwh || 0,
+                unit: "kWh",
+                floorId,
+                roomId
+              },
+              selectedItem: null
+            })
+          }
+        >
+          <StatCard
+            title="Total Energy Today"
+            value={formatKwh(kpis?.total_energy_today_kwh)}
+            subtitle="Current daily usage"
+            icon={<HiOutlineBolt />}
+            tone="orange"
+          />
+        </div>
+        <div
+          onMouseEnter={() =>
+            updateSelectedVisual({
+              id: "kpi_wasted_energy",
+              title: "Wasted Energy Today",
+              shortLabel: "Wasted Energy KPI",
+              type: "kpi",
+              description: "Shows the energy lost due to waste for the current dashboard scope.",
+              dataSummary: {
+                value: kpis?.wasted_energy_today_kwh || 0,
+                unit: "kWh",
+                floorId,
+                roomId
+              },
+              selectedItem: null
+            })
+          }
+        >
+          <StatCard
+            title="Wasted Energy Today"
+            value={formatKwh(kpis?.wasted_energy_today_kwh)}
+            subtitle="Energy lost due to waste"
+            icon={<HiOutlineChartBarSquare />}
+            tone="purple"
+          />
+        </div>
+        <div
+          onMouseEnter={() =>
+            updateSelectedVisual({
+              id: "kpi_waste_ratio",
+              title: "Waste Ratio Today",
+              shortLabel: "Waste Ratio KPI",
+              type: "kpi",
+              description: "Shows the percentage of total usage that became wasted energy.",
+              dataSummary: {
+                value: resolvedWasteRatio,
+                unit: "%",
+                floorId,
+                roomId
+              },
+              selectedItem: null
+            })
+          }
+        >
+          <StatCard
+            title="Waste Ratio Today"
+            value={`${resolvedWasteRatio}%`}
+            subtitle="Compared with total usage"
+            icon={<HiOutlineBuildingOffice2 />}
+            tone="green"
+          />
+        </div>
 
-        <StatCard
-          title="Current Waste Status"
-          value={resolvedWasteStatus}
-          subtitle="Latest room waste condition"
-          icon={<HiOutlineExclamationTriangle />}
-          tone="red"
-        />
+        <div
+          onMouseEnter={() =>
+            updateSelectedVisual({
+              id: "kpi_current_waste_status",
+              title: "Current Waste Status",
+              shortLabel: "Waste Status KPI",
+              type: "kpi",
+              description: "Shows the latest waste condition for the current dashboard scope.",
+              dataSummary: {
+                value: resolvedWasteStatus,
+                floorId,
+                roomId
+              },
+              selectedItem: null
+            })
+          }
+        >
+          <StatCard
+            title="Current Waste Status"
+            value={resolvedWasteStatus}
+            subtitle="Latest room waste condition"
+            icon={<HiOutlineExclamationTriangle />}
+            tone="red"
+          />
+        </div>
       </div>
 
       {roomId === "all" ? (
@@ -782,7 +881,50 @@ export default function OwnerDashboard() {
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart
                     data={overviewComparison.data}
-                    onClick={handleOverviewChartClick}
+                    onMouseEnter={() =>
+                      updateSelectedVisual({
+                        id: "overview_energy_comparison",
+                        title:
+                          floorId === "all"
+                            ? "Floor-wise Energy Comparison"
+                            : `${floorId} Room-wise Energy Comparison`,
+                        shortLabel:
+                          floorId === "all"
+                            ? "Floor Comparison Chart"
+                            : "Room Comparison Chart",
+                        type: "bar_chart",
+                        description:
+                          floorId === "all"
+                            ? "Compares total and wasted energy across floors."
+                            : "Compares total and wasted energy across rooms in the selected floor.",
+                        dataSummary: overviewComparison.data,
+                        selectedItem: null
+                      })
+                    }
+                    onClick={(state) => {
+                      const payload = state?.activePayload?.[0]?.payload || null;
+
+                      updateSelectedVisual({
+                        id: "overview_energy_comparison",
+                        title:
+                          floorId === "all"
+                            ? "Floor-wise Energy Comparison"
+                            : `${floorId} Room-wise Energy Comparison`,
+                        shortLabel:
+                          floorId === "all"
+                            ? "Floor Comparison Chart"
+                            : "Room Comparison Chart",
+                        type: "bar_chart",
+                        description:
+                          floorId === "all"
+                            ? "Compares total and wasted energy across floors."
+                            : "Compares total and wasted energy across rooms in the selected floor.",
+                        dataSummary: overviewComparison.data,
+                        selectedItem: payload
+                      });
+
+                      handleOverviewChartClick(state);
+                    }}
                     margin={{ top: 12, right: 18, left: 0, bottom: 8 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -837,7 +979,32 @@ export default function OwnerDashboard() {
                 {roomId === "all" && roomsOverview.length > 0 && (
                   <div style={{ marginTop: "18px" }} className="owner-room-grid">
                     {roomsOverview.map((room) => (
-                      <OwnerRoomTile key={room.room_id} room={room} />
+                      <div
+                        key={room.room_id}
+                        onMouseEnter={() =>
+                          updateSelectedVisual({
+                            id: "room_overview_card",
+                            title: `${room.room_id} Room Overview`,
+                            shortLabel: "Room Overview Card",
+                            type: "room_card",
+                            description:
+                              "Shows a room's current waste condition, energy usage, and alert state.",
+                            dataSummary: {
+                              room_id: room.room_id,
+                              floor_id: room.floor_id,
+                              total_energy_kwh: room.total_energy_kwh,
+                              wasted_energy_kwh: room.wasted_energy_kwh,
+                              waste_ratio_percent: room.waste_ratio_percent,
+                              waste_stat: room.waste_stat,
+                              noise_stat: room.noise_stat,
+                              alert_count: room.alert_count
+                            },
+                            selectedItem: room
+                          })
+                        }
+                      >
+                        <OwnerRoomTile room={room} />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -845,7 +1012,32 @@ export default function OwnerDashboard() {
             ) : roomId === "all" && roomsOverview.length > 0 ? (
               <div className="owner-room-grid">
                 {roomsOverview.map((room) => (
-                  <OwnerRoomTile key={room.room_id} room={room} />
+                  <div
+                    key={room.room_id}
+                    onMouseEnter={() =>
+                      updateSelectedVisual({
+                        id: "room_overview_card",
+                        title: `${room.room_id} Room Overview`,
+                        shortLabel: "Room Overview Card",
+                        type: "room_card",
+                        description:
+                          "Shows a room's current waste condition, energy usage, and alert state.",
+                        dataSummary: {
+                          room_id: room.room_id,
+                          floor_id: room.floor_id,
+                          total_energy_kwh: room.total_energy_kwh,
+                          wasted_energy_kwh: room.wasted_energy_kwh,
+                          waste_ratio_percent: room.waste_ratio_percent,
+                          waste_stat: room.waste_stat,
+                          noise_stat: room.noise_stat,
+                          alert_count: room.alert_count
+                        },
+                        selectedItem: room
+                      })
+                    }
+                  >
+                    <OwnerRoomTile room={room} />
+                  </div>
                 ))}
               </div>
             ) : (
@@ -874,7 +1066,38 @@ export default function OwnerDashboard() {
         <>
           <SectionCard title="Historical and Forecasted Energy Trend">
             <ResponsiveContainer width="100%" height={360}>
-              <ComposedChart data={chartData}>
+              <ComposedChart
+                className="history-chart"
+                data={chartData}
+                onMouseEnter={() =>
+                  updateSelectedVisual({
+                    id: "energy_usage_history",
+                    title: "Energy Usage and Waste History",
+                    shortLabel: "History Chart",
+                    type: "composed",
+                    description:
+                      "Shows actual and forecasted energy and wasted energy over time.",
+                    dataSummary: chartData,
+                    selectedItem: null
+                  })
+                }
+                onClick={(entry) => {
+                  const point = entry?.activePayload?.[0]?.payload || null;
+
+                  updateSelectedVisual({
+                    id: "energy_usage_history",
+                    title: "Energy Usage and Waste History",
+                    shortLabel: "History Chart",
+                    type: "composed",
+                    description:
+                      "Shows actual and forecasted energy and wasted energy over time.",
+                    dataSummary: chartData,
+                    selectedItem: point
+                  });
+
+                  handleHistoryPointSelect(entry);
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
                 <XAxis
                   dataKey="date"
@@ -959,7 +1182,20 @@ export default function OwnerDashboard() {
 
           <SectionCard title="Abnormal Waste Days">
             {anomalies.length ? (
-              <div className="table-wrap">
+              <div
+                className="table-wrap"
+                onMouseEnter={() =>
+                  updateSelectedVisual({
+                    id: "abnormal_waste_days",
+                    title: "Abnormal Waste Days",
+                    shortLabel: "Abnormal Waste Table",
+                    type: "table",
+                    description: "Lists abnormal waste days detected from analytics.",
+                    dataSummary: anomalies,
+                    selectedItem: null
+                  })
+                }
+              >
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -991,6 +1227,19 @@ export default function OwnerDashboard() {
           </SectionCard>
 
           <SectionCard title="Weekly Pattern Discovery">
+            <div
+              onMouseEnter={() =>
+                updateSelectedVisual({
+                  id: "weekday_pattern_chart",
+                  title: "Weekly Pattern Discovery",
+                  shortLabel: "Weekly Pattern Table",
+                  type: "table",
+                  description: "Shows weekday waste patterns for the selected room.",
+                  dataSummary: weekdayPatterns,
+                  selectedItem: null
+                })
+              }
+            >
             {weekdayPatterns.length ? (
               <div className="table-wrap">
                 <table className="data-table">
@@ -1033,9 +1282,31 @@ export default function OwnerDashboard() {
             ) : (
               <p>No weekday pattern discovery available yet.</p>
             )}
+            </div>
           </SectionCard>
           <SectionCard title="Monthly Waste Calendar">
-            <div className="owner-calendar-wrap">
+            <div
+              className="owner-calendar-wrap"
+              onMouseEnter={() =>
+                updateSelectedVisual({
+                  id: "monthly_waste_calendar",
+                  title: "Monthly Waste Calendar",
+                  shortLabel: "Waste Calendar",
+                  type: "calendar",
+                  description: "Shows daily waste severity across the month.",
+                  dataSummary: calendarDays
+                    .filter((day) => day.data)
+                    .map((day) => ({
+                      date: day.key,
+                      waste_status: day.data.waste_status,
+                      waste_ratio_percent: day.data.waste_ratio_percent,
+                      total_energy_kwh: day.data.total_energy_kwh,
+                      wasted_energy_kwh: day.data.wasted_energy_kwh
+                    })),
+                  selectedItem: selectedDayData || null
+                })
+              }
+            >
               <div className="owner-calendar-toolbar">
                 <button
                   type="button"

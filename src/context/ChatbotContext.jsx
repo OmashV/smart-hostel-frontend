@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 
 const ChatbotContext = createContext(undefined);
 
@@ -7,13 +7,16 @@ export function ChatbotProvider({ children }) {
   const [chatConfig, setChatConfig] = useState({
     role: "owner",
     dashboardState: {
+      dashboard: "owner",
       floorId: "all",
-      roomId: "all"
+      roomId: "all",
+      selectedVisual: null,
+      selectedFilters: {}
     },
     onAction: null
   });
 
-  const registerChatContext = useCallback((config) => {
+  const registerChatContext = (config) => {
     setChatConfig((prev) => ({
       ...prev,
       ...config,
@@ -22,26 +25,51 @@ export function ChatbotProvider({ children }) {
         ...(config?.dashboardState || {})
       }
     }));
-  }, []);
+  };
 
-  const clearChatContext = useCallback(() => {
+  const updateSelectedVisual = (selectedVisual) => {
+    setChatConfig((prev) => ({
+      ...prev,
+      dashboardState: {
+        ...prev.dashboardState,
+        selectedVisual
+      }
+    }));
+  };
+
+  const clearSelectedVisual = () => {
+    setChatConfig((prev) => ({
+      ...prev,
+      dashboardState: {
+        ...prev.dashboardState,
+        selectedVisual: null
+      }
+    }));
+  };
+
+  const clearChatContext = () => {
     setChatConfig({
       role: "owner",
       dashboardState: {
+        dashboard: "owner",
         floorId: "all",
-        roomId: "all"
+        roomId: "all",
+        selectedVisual: null,
+        selectedFilters: {}
       },
       onAction: null
     });
-  }, []);
+  };
 
   const value = useMemo(
     () => ({
       chatConfig,
       registerChatContext,
+      updateSelectedVisual,
+      clearSelectedVisual,
       clearChatContext
     }),
-    [chatConfig, registerChatContext, clearChatContext]
+    [chatConfig]
   );
 
   return (
