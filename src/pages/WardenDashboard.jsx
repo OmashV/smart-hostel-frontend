@@ -922,6 +922,540 @@ export default function WardenDashboard() {
         </div>
       ) : null}
 
+
+      <div className="owner-top-grid">
+        <SectionCard title="Inspection Evidence and Report Support">
+          {filteredRooms.length ? (
+            <DataTable
+              columns={[
+                { key: "room_id", label: "Room" },
+                { key: "captured_at", label: "Last Evidence", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") },
+                { key: "sound_peak", label: "Noise Evidence", render: (row) => `${formatNumber(row.sound_peak)} dB` },
+                { key: "motion_count", label: "Motion" },
+                { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> },
+                { key: "inspection_reasons", label: "Warden Reason", render: (row) => renderReasons(row.inspection_reasons) },
+                { key: "sensor_faults", label: "Sensor Fault Evidence", render: (row) => renderFaults(row.sensor_faults) }
+              ]}
+              rows={filteredRooms.slice(0, 12)}
+            />
+          ) : (
+            <EmptyState text="No evidence rows available for the selected filters." />
+          )}
+        </SectionCard>
+
+        <SectionCard title="ML Feature Importance">
+          {wardenFeatureImportance.length ? (
+            <div className="chart-shell">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={wardenFeatureImportance.slice(0, 8)} layout="vertical" margin={{ top: 8, right: 24, left: 80, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
+                  <XAxis type="number" tick={{ fill: "#64748b", fontSize: 12 }} />
+                  <YAxis type="category" dataKey="feature" tick={{ fill: "#64748b", fontSize: 12 }} width={90} />
+                  <Tooltip contentStyle={chartTooltipStyle} />
+                  <Bar dataKey="importance" name="Model Importance" fill="#7c3aed" radius={[0, 8, 8, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState text="No feature-importance records available. Run npm run ml:warden." />
+          )}
+        </SectionCard>
+      </div>
+
+
+      <div className="owner-top-grid">
+        <SectionCard title="Daily Historical Evidence Table">
+          {wardenHistory.length ? (
+            <DataTable
+              columns={[
+                {
+                  key: "date",
+                  label: "Date"
+                },
+                {
+                  key: "occupied_count",
+                  label: "Actual Occupancy"
+                },
+                {
+                  key: "warning_count",
+                  label: "Warnings"
+                },
+                {
+                  key: "violation_count",
+                  label: "Violations"
+                },
+                {
+                  key: "inspection_count",
+                  label: "Inspection Count"
+                },
+                {
+                  key: "avg_sound_peak",
+                  label: "Avg Noise",
+                  render: (row) => `${formatNumber(row.avg_sound_peak)} dB`
+                },
+                {
+                  key: "avg_current",
+                  label: "Avg Current",
+                  render: (row) => `${formatNumber(row.avg_current, 4)} A`
+                },
+                {
+                  key: "source",
+                  label: "Source",
+                  render: (row) => row.source || "summary"
+                }
+              ]}
+              rows={wardenHistory.slice(-10)}
+            />
+          ) : (
+            <EmptyState text="No historical evidence rows available." />
+          )}
+        </SectionCard>
+
+        <SectionCard title="Forecast Evidence Table">
+          {wardenForecasts.length ? (
+            <DataTable
+              columns={[
+                {
+                  key: "room_id",
+                  label: "Room"
+                },
+                {
+                  key: "date",
+                  label: "Forecast Date"
+                },
+                {
+                  key: "predicted_occupied_count",
+                  label: "Predicted Occupancy",
+                  render: (row) => formatNumber(row.predicted_occupied_count)
+                },
+                {
+                  key: "predicted_warning_count",
+                  label: "Predicted Warnings",
+                  render: (row) => formatNumber(row.predicted_warning_count)
+                },
+                {
+                  key: "predicted_violation_count",
+                  label: "Predicted Violations",
+                  render: (row) => formatNumber(row.predicted_violation_count)
+                },
+                {
+                  key: "model_name",
+                  label: "Forecast Model"
+                }
+              ]}
+              rows={wardenForecasts.slice(0, 14)}
+            />
+          ) : (
+            <EmptyState text="No forecast rows available. Run the Warden ML pipeline." />
+          )}
+        </SectionCard>
+      </div>
+
+      <div className="owner-top-grid">
+        <SectionCard title="Warden Decision Support Summary">
+          <div className="warden-decision-grid">
+            <div className="warden-decision-card">
+              <h3>Immediate Warning Evidence</h3>
+              <p>
+                The alert list is generated from the Warden ML alert collection,
+                not from a frontend sound threshold.
+              </p>
+              <strong>{roomSpecificAlerts.length}</strong>
+              <span>active ML alerts in current filter</span>
+            </div>
+            <div className="warden-decision-card">
+              <h3>Inspection Planning</h3>
+              <p>
+                Inspection priority combines room status, learned anomaly outputs,
+                and evidence fields returned by the backend.
+              </p>
+              <strong>{cleaningPriorityRooms.length}</strong>
+              <span>rooms needing cleaning or inspection</span>
+            </div>
+            <div className="warden-decision-card">
+              <h3>Weekly Behavior</h3>
+              <p>
+                Pattern rows are generated by KMeans and displayed Monday to Sunday
+                so the warden can explain usual hostel behavior.
+              </p>
+              <strong>{patternRows.filter((row) => row.cluster_id !== -1).length}</strong>
+              <span>days with learned pattern data</span>
+            </div>
+            <div className="warden-decision-card">
+              <h3>Forecast Readiness</h3>
+              <p>
+                Forecast data uses the MongoDB analysis output and is visualized
+                together with actual historical Warden room trends.
+              </p>
+              <strong>{wardenForecasts.length}</strong>
+              <span>forecast rows loaded</span>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Mobile Warden Quick View">
+          <div className="warden-mobile-list">
+            {filteredRooms.slice(0, 8).map((room) => (
+              <div className="warden-mobile-item" key={`${room.room_id}-mobile`}>
+                <div>
+                  <strong>{room.room_id}</strong>
+                  <span>{room.captured_at ? formatDate(room.captured_at) : "No Data"}</span>
+                </div>
+                <div>
+                  <StatusBadge value={room.occupancy_stat} />
+                  <StatusBadge value={room.noise_stat} />
+                </div>
+                <p>{renderReasons(room.inspection_reasons)}</p>
+              </div>
+            ))}
+            {!filteredRooms.length ? <EmptyState text="No mobile room rows available." /> : null}
+          </div>
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Per-Room Action Matrix">
+        {filteredRooms.length ? (
+          <DataTable
+            columns={[
+              {
+                key: "room_id",
+                label: "Room"
+              },
+              {
+                key: "floor_id",
+                label: "Floor"
+              },
+              {
+                key: "occupancy_stat",
+                label: "Occupancy",
+                render: (row) => <StatusBadge value={row.occupancy_stat} />
+              },
+              {
+                key: "noise_stat",
+                label: "Noise",
+                render: (row) => <StatusBadge value={row.noise_stat} />
+              },
+              {
+                key: "waste_stat",
+                label: "Energy/Waste",
+                render: (row) => <StatusBadge value={row.waste_stat} />
+              },
+              {
+                key: "needs_inspection",
+                label: "Inspection",
+                render: (row) => (row.needs_inspection ? <HistoryWord value="Required" /> : <HistoryWord value="Normal" />)
+              },
+              {
+                key: "inspection_reasons",
+                label: "Evidence Reason",
+                render: (row) => renderReasons(row.inspection_reasons)
+              },
+              {
+                key: "captured_at",
+                label: "Last Update",
+                render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data")
+              }
+            ]}
+            rows={filteredRooms}
+          />
+        ) : (
+          <EmptyState text="No action matrix rows for current filter." />
+        )}
+      </SectionCard>
+
+      <SectionCard title="ML Alert Audit Trail">
+        {activeAlerts.length ? (
+          <DataTable
+            columns={[
+              {
+                key: "room_id",
+                label: "Room"
+              },
+              {
+                key: "captured_at",
+                label: "Detected At",
+                render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data")
+              },
+              {
+                key: "severity",
+                label: "Severity",
+                render: (row) => <StatusBadge value={row.severity} />
+              },
+              {
+                key: "confidence",
+                label: "Confidence",
+                render: (row) => `${Math.round(Number(row.confidence || 0) * 100)}%`
+              },
+              {
+                key: "model_name",
+                label: "Model"
+              },
+              {
+                key: "reason",
+                label: "ML Reason"
+              }
+            ]}
+            rows={activeAlerts.slice(0, 20)}
+          />
+        ) : (
+          <EmptyState text="No ML alert audit rows available." />
+        )}
+      </SectionCard>
+
+
+      <SectionCard title="Warden Requirement Coverage Panel">
+        <div className="warden-requirement-grid">
+          <div className="warden-requirement-item">
+            <strong>Real-time occupancy visibility</strong>
+            <p>Displayed using room status cards, KPI cards, and room action matrix.</p>
+            <HistoryWord value={rooms.length ? "Available" : "No Data"} />
+          </div>
+          <div className="warden-requirement-item">
+            <strong>Noise issue awareness</strong>
+            <p>Displayed using ML alerts, noise trend chart, and anomaly evidence.</p>
+            <HistoryWord value={activeAlerts.length ? "Active" : "Normal"} />
+          </div>
+          <div className="warden-requirement-item">
+            <strong>Incident / alert history</strong>
+            <p>Displayed through ML alert audit and anomaly records.</p>
+            <HistoryWord value={wardenAnomalies.length ? "Available" : "No Data"} />
+          </div>
+          <div className="warden-requirement-item">
+            <strong>Cleaning / inspection priority</strong>
+            <p>Displayed through cleaning priority KPI and per-room action matrix.</p>
+            <HistoryWord value={cleaningPriorityRooms.length ? "Required" : "Normal"} />
+          </div>
+          <div className="warden-requirement-item">
+            <strong>Mobile / simple access</strong>
+            <p>Displayed through quick room cards and compact mobile quick view.</p>
+            <HistoryWord value="Available" />
+          </div>
+          <div className="warden-requirement-item">
+            <strong>Evidence for warnings</strong>
+            <p>Displayed with captured time, sound, door, motion, and model confidence.</p>
+            <HistoryWord value="Available" />
+          </div>
+          <div className="warden-requirement-item">
+            <strong>Reduced manual checking</strong>
+            <p>ML alerts, anomaly detection, and weekly patterns prioritize rooms automatically.</p>
+            <HistoryWord value="Available" />
+          </div>
+          <div className="warden-requirement-item">
+            <strong>Data validity</strong>
+            <p>Data range API proves record count, first timestamp, last timestamp, and days covered.</p>
+            <HistoryWord value={dataRange?.is_valid_5_to_7_days_or_more ? "Valid" : "Needs More Data"} />
+          </div>
+        </div>
+      </SectionCard>
+
+      <div className="owner-top-grid">
+        <SectionCard title="Actual vs Predicted Warden Metrics">
+          {forecastChartData.length ? (
+            <DataTable
+              columns={[
+                {
+                  key: "date",
+                  label: "Date"
+                },
+                {
+                  key: "actual_occupancy",
+                  label: "Actual Occupancy",
+                  render: (row) => row.actual_occupancy === null ? "-" : formatNumber(row.actual_occupancy)
+                },
+                {
+                  key: "actual_warnings",
+                  label: "Actual Warnings",
+                  render: (row) => row.actual_warnings === null ? "-" : formatNumber(row.actual_warnings)
+                },
+                {
+                  key: "predicted_occupancy",
+                  label: "Predicted Occupancy",
+                  render: (row) => row.predicted_occupancy === null ? "-" : formatNumber(row.predicted_occupancy)
+                },
+                {
+                  key: "predicted_warnings",
+                  label: "Predicted Warnings",
+                  render: (row) => row.predicted_warnings === null ? "-" : formatNumber(row.predicted_warnings)
+                }
+              ]}
+              rows={forecastChartData}
+            />
+          ) : (
+            <EmptyState text="No actual/predicted comparison rows available." />
+          )}
+        </SectionCard>
+
+        <SectionCard title="Weekly Pattern Explanation">
+          <div className="warden-pattern-explain-list">
+            {patternRows.map((row) => (
+              <div className="warden-pattern-explain-item" key={`${row.day}-explain`}>
+                <div>
+                  <strong>{row.day}</strong>
+                  <span>{row.day_type}</span>
+                </div>
+                <HistoryWord value={row.usual_pattern} />
+                <p>
+                  Average occupancy {formatNumber(row.avg_occupancy)}, average noise {formatNumber(row.avg_noise_level)},
+                  warnings {formatNumber(row.avg_warnings)}, critical ratio {formatNumber(row.avg_critical_ratio)}%,
+                  cluster {row.cluster_id}.
+                </p>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </div>
+
+      <SectionCard title="MongoDB Collections Used by Warden Dashboard">
+        <DataTable
+          columns={[
+            {
+              key: "collection",
+              label: "Collection"
+            },
+            {
+              key: "purpose",
+              label: "Purpose"
+            },
+            {
+              key: "used_for",
+              label: "Dashboard Usage"
+            },
+            {
+              key: "count",
+              label: "Current Filter Count"
+            }
+          ]}
+          rows={[
+            {
+              collection: "sensorreadings",
+              purpose: "Raw IoT sensor readings",
+              used_for: "latest room status and fallback history",
+              count: dataRange?.sensor_records ?? 0
+            },
+            {
+              collection: "daily_room_summary",
+              purpose: "Owner-style daily room summaries shared by the integrated project",
+              used_for: "fallback room coverage for A102/A103 and daily history",
+              count: dataRange?.daily_summary_records ?? 0
+            },
+            {
+              collection: "warden_hourly_summary",
+              purpose: "Warden-specific hourly summarized room behavior",
+              used_for: "preferred historical trend source and ML input",
+              count: dataRange?.hourly_summary_records ?? 0
+            },
+            {
+              collection: "warden_ml_alerts",
+              purpose: "IsolationForest ML alert outputs",
+              used_for: "active alert cards and alert audit trail",
+              count: activeAlerts.length
+            },
+            {
+              collection: "warden_anomalies",
+              purpose: "IsolationForest anomaly / outlier records",
+              used_for: "abnormal action days table",
+              count: wardenAnomalies.length
+            },
+            {
+              collection: "warden_patterns",
+              purpose: "KMeans weekly behavior pattern discovery",
+              used_for: "Monday-Sunday pattern table",
+              count: wardenPatterns.length
+            },
+            {
+              collection: "warden_forecasts",
+              purpose: "Prophet or RandomForest daily forecasts",
+              used_for: "historical and forecasted room trend",
+              count: wardenForecasts.length
+            }
+          ]}
+        />
+      </SectionCard>
+
+
+      <SectionCard title="Warden Viva Explanation Snapshot">
+        <div className="warden-viva-grid">
+          <div className="warden-viva-card">
+            <h3>How A102 / A103 Data Is Loaded</h3>
+            <p>
+              The Warden backend first checks raw sensor readings, then hourly Warden summaries,
+              and also reads the same daily room summaries used by the Owner dashboard.
+            </p>
+          </div>
+          <div className="warden-viva-card">
+            <h3>Why Alerts Are Not Frontend Rules</h3>
+            <p>
+              Active alerts are loaded from warden_ml_alerts. The React dashboard only displays
+              records returned by the API and does not create sound threshold alerts in JSX.
+            </p>
+          </div>
+          <div className="warden-viva-card">
+            <h3>Why Forecasting Is Real Analysis</h3>
+            <p>
+              Forecast rows are generated by the backend ML script using Prophet when available
+              or RandomForestRegressor fallback, then saved to MongoDB.
+            </p>
+          </div>
+          <div className="warden-viva-card">
+            <h3>Why Weekly Patterns Are ML-Based</h3>
+            <p>
+              Monday to Sunday rows come from KMeans clustering over Warden room behavior features,
+              not from manually assigned weekday labels.
+            </p>
+          </div>
+          <div className="warden-viva-card">
+            <h3>Why This Matches Owner Style</h3>
+            <p>
+              It keeps Owner-style KPI flow, side-by-side cards, chart shell styling,
+              Recharts trend visualization, DataTable sections, and drill-down modals.
+            </p>
+          </div>
+          <div className="warden-viva-card">
+            <h3>What the Warden Can Decide</h3>
+            <p>
+              The Warden can identify active alerts, rooms needing inspection, weekly behavior,
+              anomaly records, forecasted warning days, and evidence for reports.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Data Validity and MongoDB Source Coverage">
+        <div className="warden-data-validity-grid">
+          <div className="warden-validity-card">
+            <span>Total Records</span>
+            <strong>{dataRange?.total_records ?? 0}</strong>
+            <p>Combined Warden source coverage</p>
+          </div>
+          <div className="warden-validity-card">
+            <span>Raw IoT Records</span>
+            <strong>{dataRange?.sensor_records ?? 0}</strong>
+            <p>sensorreadings collection</p>
+          </div>
+          <div className="warden-validity-card">
+            <span>Hourly Summary</span>
+            <strong>{dataRange?.hourly_summary_records ?? 0}</strong>
+            <p>warden_hourly_summary collection</p>
+          </div>
+          <div className="warden-validity-card">
+            <span>Daily Summary</span>
+            <strong>{dataRange?.daily_summary_records ?? 0}</strong>
+            <p>daily_room_summary collection shared with Owner</p>
+          </div>
+          <div className="warden-validity-card wide">
+            <span>Validity Status</span>
+            <strong>{dataRange?.is_valid_5_to_7_days_or_more ? "Valid" : "Needs More Data"}</strong>
+            <p>
+              {dataRange?.first_timestamp ? formatDate(dataRange.first_timestamp) : "No first timestamp"}
+              {" → "}
+              {dataRange?.last_timestamp ? formatDate(dataRange.last_timestamp) : "No last timestamp"}
+              {" | "}
+              {(dataRange?.data_sources || []).join(", ") || "No sources"}
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
       <ChatAssistant roomId={selectedRoomFilter} />
     </div>
   );
