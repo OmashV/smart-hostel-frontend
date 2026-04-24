@@ -1,10 +1,23 @@
+import { useLocation } from "react-router-dom";
+
 export default function Header() {
-    return (
-      <header className="topbar">
+  const { pathname } = useLocation();
+  const isOwnerDashboard = pathname === "/owner";
+
+  return (
+    <header className="topbar">
+      <div className="topbar-left">
         <div>
-          <h1>Smart Hostel Monitoring Dashboard</h1>
-          <p>Energy, waste, occupancy, behavior, and security views by user role.</p>
+          <h1>
+            {isOwnerDashboard
+              ? "Hostel Energy Management Dashboard"
+              : "Smart Hostel Monitoring Dashboard"}
+          </h1>
+          {!isOwnerDashboard ? (
+            <p>Energy, waste, occupancy, behavior, and security views by user role.</p>
+          ) : null}
         </div>
-      </header>
-    );
-  }
+      </div>
+    </header>
+  );
+}
