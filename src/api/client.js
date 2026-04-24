@@ -1,235 +1,51 @@
 import axios from "axios";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/rooms/warden";
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL
+  baseURL: API_BASE
 });
 
-export async function getAvailableFloors() {
-  const { data } = await api.get("/rooms/available-floors");
+function roomParams(roomId = "All") {
+  return { params: { roomId } };
+}
+
+export async function getSummary(roomId = "All") {
+  const { data } = await api.get("/summary", roomParams(roomId));
   return data;
 }
 
-export async function getAvailableRooms(floorId) {
-  const { data } = await api.get("/rooms/available-rooms", {
-    params: floorId && floorId !== "All" && floorId !== "all" ? { floorId } : {}
-  });
+export async function getRoomsStatus(roomId = "All") {
+  const { data } = await api.get("/rooms-status", roomParams(roomId));
   return data;
 }
 
-export async function getFloorOverview() {
-  const { data } = await api.get("/rooms/floors/overview");
+export async function getAlerts(roomId = "All") {
+  const { data } = await api.get("/ml-alerts", roomParams(roomId));
   return data;
 }
 
-export async function getOwnerKpis(roomId = "A101") {
-  const { data } = await api.get(`/rooms/${roomId}/owner-kpis`);
+export async function getAnomalies(roomId = "All") {
+  const { data } = await api.get("/anomalies", roomParams(roomId));
   return data;
 }
 
-export async function getOwnerRoomsOverview(floorId) {
-  const { data } = await api.get("/rooms/owner/rooms-overview", {
-    params: floorId && floorId !== "All" && floorId !== "all" ? { floorId } : {}
-  });
+export async function getPatterns(roomId = "All") {
+  const { data } = await api.get("/patterns", roomParams(roomId));
   return data;
 }
 
-export async function getOwnerRoomComparison() {
-  const { data } = await api.get(`/rooms/owner/room-comparison`);
+export async function getForecasts(roomId = "All") {
+  const { data } = await api.get("/forecasts", roomParams(roomId));
   return data;
 }
 
-export async function getOwnerWeekdayPatterns(roomId) {
-  const { data } = await api.get("/rooms/owner/weekday-patterns", {
-    params: roomId ? { roomId } : {}
-  });
+export async function getHistory(roomId = "All") {
+  const { data } = await api.get("/history", roomParams(roomId));
   return data;
 }
 
-export async function getOwnerAlerts(roomId) {
-  const { data } = await api.get("/rooms/owner/alerts", {
-    params: roomId ? { roomId } : {}
-  });
-  return data;
-}
-
-export async function resolveOwnerAlert(alertId) {
-  const { data } = await api.patch(`/rooms/owner/alerts/${alertId}/resolve`);
-  return data;
-}
-
-export async function deleteOwnerAlert(alertId) {
-  const { data } = await api.delete(`/rooms/owner/alerts/${alertId}`);
-  return data;
-}
-
-
-export async function getOwnerAnomalies(roomId) {
-  const { data } = await api.get("/rooms/owner/anomalies", {
-    params: roomId ? { roomId } : {}
-  });
-  return data;
-}
-
-export async function getOwnerFeatureImportance() {
-  const { data } = await api.get(`/rooms/owner/feature-importance`);
-  return data;
-}
-
-
-
-export async function getOwnerPatterns() {
-  const { data } = await api.get(`/rooms/owner/patterns`);
-  return data;
-}
-
-export async function getOwnerForecasts() {
-  const { data } = await api.get(`/rooms/owner/forecasts`);
-  return data;
-}
-
-export async function getEnergyHistory(roomId = "A101") {
-  const { data } = await api.get(`/rooms/${roomId}/energy/history`);
-  return data;
-}
-
-export async function getEnergyForecast(roomId = "A101", days = 5) {
-  const { data } = await api.get(`/rooms/${roomId}/energy/forecast?days=${days}`);
-  return data;
-}
-
-export async function getTopWasteDays(roomId = "A101", limit = 5) {
-  const { data } = await api.get(`/rooms/${roomId}/energy/top-waste-days?limit=${limit}`);
-  return data;
-}
-export async function getWardenSummary() {
-  const { data } = await api.get(`/rooms/warden/summary`);
-  return data;
-}
-
-export async function getWardenRoomsStatus() {
-  const { data } = await api.get(`/rooms/warden/rooms-status`);
-  return data;
-}
-
-export async function getWardenNoiseIssues() {
-  const { data } = await api.get(`/rooms/warden/noise-issues`);
-  return data;
-}
-
-export async function getWardenInspectionQueue() {
-  const { data } = await api.get(`/rooms/warden/inspection-queue`);
-  return data;
-}
-
-export async function getWardenNoiseTrend(days = 7) {
-  const { data } = await api.get(`/rooms/warden/noise-trend?days=${days}`);
-  return data;
-}
-export async function getWardenHistory(days = 7, roomId = "All") {
-  const query =
-    roomId && roomId !== "All"
-      ? `/rooms/warden/history?days=${days}&roomId=${roomId}`
-      : `/rooms/warden/history?days=${days}`;
-
-  const { data } = await api.get(query);
-  return data;
-}
-
-export async function getSecuritySummary(roomId) {
-  const { data } = await api.get(`/rooms/security/summary`, {
-    params: roomId ? { roomId } : {}
-  });
-  return data;
-}
-
-export async function getSecuritySuspiciousRooms(roomId) {
-  const { data } = await api.get(`/rooms/security/suspicious-rooms`, {
-    params: roomId ? { roomId } : {}
-  });
-  return data;
-}
-
-export async function getSecurityDoorEvents(roomId, limit = 50) {
-  const { data } = await api.get(`/rooms/security/door-events`, {
-    params: {
-      ...(roomId ? { roomId } : {}),
-      limit
-    }
-  });
-  return data;
-}
-
-export async function getSecurityTrend(roomId, limit = 200) {
-  const { data } = await api.get(`/rooms/security/trend`, {
-    params: {
-      ...(roomId ? { roomId } : {}),
-      limit
-    }
-  });
-  return data;
-}
-
-export async function getSecurityAnomalies(roomId, limit = 50) {
-  const { data } = await api.get(`/rooms/security/anomalies`, {
-    params: {
-      ...(roomId ? { roomId } : {}),
-      limit
-    }
-  });
-  return data;
-}
-
-
-export async function getStudentOverview(roomId = "A101") {
-  const { data } = await api.get(`/rooms/student/${roomId}/overview`);
-  return data;
-}
-
-export async function getStudentHistory(roomId = "A101") {
-  const { data } = await api.get(`/rooms/student/${roomId}/energy/history`);
-  return data;
-}
-
-export async function getStudentAlerts(roomId = "A101", limit = 20) {
-  const { data } = await api.get(`/rooms/student/${roomId}/alerts?limit=${limit}`);
-  return data;
-}
-
-export async function getWardenFeatureImportance() {
-  const res = await api.get("/rooms/warden/feature-importance");
-  return res.data;
-}
-
-export async function getWardenAnomalies(roomId = "All") {
-  const res = await api.get("/rooms/warden/anomalies", {
-    params: roomId && roomId !== "All" ? { roomId } : {}
-  });
-  return res.data;
-}
-
-export async function getWardenPatterns(roomId = "All") {
-  const res = await api.get("/rooms/warden/patterns", {
-    params: roomId && roomId !== "All" ? { roomId } : { roomId: "All" }
-  });
-  return res.data;
-}
-
-export async function getWardenForecasts(roomId = "All") {
-  const res = await api.get("/rooms/warden/forecasts", {
-    params: roomId && roomId !== "All" ? { roomId } : {}
-  });
-  return res.data;
-}
-
-export async function getWardenMlAlerts(roomId = "All", limit = 20) {
-  const res = await api.get("/rooms/warden/ml-alerts", {
-    params: { roomId, limit }
-  });
-  return res.data;
-}
-
-
-export async function askDashboardAssistant(question, role = "warden") {
-  const { data } = await api.post("/chat/query", { question, role });
+export async function getDataRange(roomId = "All") {
+  const { data } = await api.get("/data-range", roomParams(roomId));
   return data;
 }
