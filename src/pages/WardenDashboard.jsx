@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiOutlineBellAlert,
   HiOutlineExclamationTriangle,
@@ -274,7 +274,7 @@ export default function WardenDashboard() {
     loadRoomsForFloor();
   }, [selectedFloor]);
 
-  async function fetchAllData() {
+  const fetchAllData = useCallback(async () => {
     try {
       setError("");
       const roomId = selectedRoomFilterRef.current;
@@ -289,6 +289,11 @@ export default function WardenDashboard() {
         getWardenHistory(roomId),
         getWardenDataRange(roomId).catch(() => null)
       ]);
+
+      // Owner-style live update: every poll creates a fresh dashboard refresh
+      // timestamp while MongoDB evidence time is displayed separately.
+      const refreshTime = new Date();
+
       setSummary(summaryRes || null);
       setRooms(roomsRes?.rooms || []);
       setMlAlerts(alertsRes?.items || []);
@@ -297,19 +302,37 @@ export default function WardenDashboard() {
       setWardenPatterns(patternRes?.items || []);
       setWardenFeatureImportance(featureImportanceRes?.items || []);
       setWardenHistory(historyRes?.items || historyRes?.history || []);
-      setLastRefreshAt(new Date());
+      setLastRefreshAt(refreshTime);
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load warden dashboard data.");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    fetchAllData();
-    const interval = setInterval(fetchAllData, 8000);
-    return () => clearInterval(interval);
-  }, [selectedRoomFilter]);
+    let timeoutId;
+    let cancelled = false;
+
+    async function loop() {
+      const startedAt = Date.now();
+      await fetchAllData();
+
+      if (cancelled) return;
+
+      const elapsed = Date.now() - startedAt;
+      const delay = Math.max(8000 - elapsed, 0);
+      timeoutId = setTimeout(loop, delay);
+    }
+
+    setLoading(true);
+    loop();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [fetchAllData, selectedRoomFilter]);
 
   const floors = useMemo(() => {
     const derived = Array.from(new Set(rooms.map((room) => getFloor(room)))).sort();
