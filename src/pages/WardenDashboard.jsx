@@ -31,7 +31,6 @@ import {
   getWardenHistory,
   getWardenMlAlerts
 } from "../api/client";
-import ChatAssistant from "../components/ChatAssistant";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import StatusBadge from "../components/StatusBadge";
@@ -608,8 +607,6 @@ setLiveHistoryLog((previous) => {
       {selectedRoomModal ? <div className="warden-modal-overlay" onClick={() => setSelectedRoomModal(null)}><div className="warden-modal warden-room-detail-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedRoomModal.room_id} Room Drill-down</h3><button onClick={() => setSelectedRoomModal(null)}>Close</button></div><div className="warden-room-detail-grid"><div className="warden-single-room-card"><h4>Current Status</h4><p><strong>Occupancy:</strong> {selectedRoomModal.occupancy_stat}</p><p><strong>Noise:</strong> {selectedRoomModal.noise_stat} · {formatNumber(selectedRoomModal.sound_peak)} dB</p><p><strong>Door:</strong> {selectedRoomModal.door_status}</p><p><strong>Current:</strong> {formatNumber(selectedRoomModal.current_amp, 3)} A</p><p><strong>Last Activity:</strong> {selectedRoomModal.captured_at ? formatDate(selectedRoomModal.captured_at) : "No Data"}</p></div><div className="warden-single-room-card"><h4>Inspection Evidence</h4><p><strong>Needs Inspection:</strong> {selectedRoomModal.needs_inspection ? "Yes" : "No"}</p><p><strong>Reasons:</strong> {renderReasons(selectedRoomModal.inspection_reasons)}</p><p><strong>Motion Count:</strong> {valueOrDash(selectedRoomModal.motion_count)}</p><p><strong>Sensor Faults:</strong> {renderFaults(selectedRoomModal.sensor_faults)}</p></div></div></div></div> : null}
 
       {selectedAlert ? <div className="warden-modal-overlay" onClick={() => setSelectedAlert(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>Critical Alert</h3><button onClick={() => setSelectedAlert(null)}>Close</button></div><div className="warden-single-room-grid"><div className="warden-single-room-card"><h4>Critical Alert Details</h4><p><strong>Room:</strong> {selectedAlert.room_id}</p><p><strong>Severity:</strong> {selectedAlert.severity}</p><p><strong>Model:</strong> {selectedAlert.model_name || "IsolationForest"}</p><p><strong>Confidence:</strong> {Math.round(Number(selectedAlert.confidence || 0) * 100)}%</p><p><strong>Reason:</strong> {selectedAlert.message || selectedAlert.reason}</p><p><strong>Displayed At:</strong> {(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) ? formatDate(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) : "No Data"}</p><p><strong>ML Evidence Time:</strong> {selectedAlert.captured_at ? formatDate(selectedAlert.captured_at) : "No Data"}</p></div></div></div></div> : null}
-
-      <ChatAssistant roomId={selectedRoomFilter} />
     </div>
   );
 }
