@@ -247,6 +247,7 @@ export default function WardenDashboard() {
   const [wardenFeatureImportance, setWardenFeatureImportance] = useState([]);
   const [wardenHistory, setWardenHistory] = useState([]);
   const [lastRefreshAt, setLastRefreshAt] = useState(new Date());
+  const [liveHistoryLog, setLiveHistoryLog] = useState([]);
   const selectedRoomFilterRef = useRef(selectedRoomFilter);
 
   useEffect(() => { selectedRoomFilterRef.current = selectedRoomFilter; }, [selectedRoomFilter]);
@@ -299,7 +300,25 @@ export default function WardenDashboard() {
       setWardenPatterns(patternRes?.items || []);
       setWardenFeatureImportance(featureImportanceRes?.items || []);
       setWardenHistory(historyRes?.items || historyRes?.history || []);
-      setLastRefreshAt(new Date());
+      const refreshTime = new Date();
+setLastRefreshAt(refreshTime);
+
+const snapshotRows = (roomsRes?.rooms || []).map((room) => ({
+  id: `${room.room_id}-${refreshTime.toISOString()}`,
+  room_id: room.room_id,
+  date: refreshTime.toLocaleDateString(),
+  time: refreshTime.toLocaleTimeString(),
+  occupied_count: room.occupancy_stat || "-",
+  warning_count: room.noise_stat || "-",
+  violation_count: room.needs_inspection ? "Needs Inspection" : "Stable",
+  avg_sound_peak: Number(room.sound_peak || 0),
+  source: "Live 8-second snapshot"
+}));
+
+setLiveHistoryLog((previous) => {
+  const combined = [...snapshotRows, ...previous];
+  return combined.slice(0, 120);
+});
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load warden dashboard data.");
     } finally {
@@ -383,83 +402,47 @@ export default function WardenDashboard() {
   }, [wardenPatterns]);
 
   const forecastChartData = useMemo(() => {
-    const actualRows = (wardenHistory || []).map((item) => ({
+  const actualRows = (wardenHistory || [])
+    .filter((item) => item?.date)
+    .map((item) => ({
       date: item.date,
       actual_occupancy: Number(item.occupied_count || 0),
       actual_warnings: Number(item.warning_count || 0),
       predicted_occupancy: null,
       predicted_warnings: null
     }));
-    const predictedRows = (wardenForecasts || []).map((item) => ({
+
+  const lastActual = actualRows[actualRows.length - 1];
+
+  const bridgeRow = lastActual
+    ? [{
+        date: lastActual.date,
+        actual_occupancy: lastActual.actual_occupancy,
+        actual_warnings: lastActual.actual_warnings,
+        predicted_occupancy: lastActual.actual_occupancy,
+        predicted_warnings: lastActual.actual_warnings
+      }]
+    : [];
+
+  const predictedRows = (wardenForecasts || [])
+    .filter((item) => item?.date)
+    .map((item) => ({
       date: item.date,
       actual_occupancy: null,
       actual_warnings: null,
       predicted_occupancy: Number(item.predicted_occupied_count || 0),
       predicted_warnings: Number(item.predicted_warning_count || 0)
     }));
-    return [...actualRows, ...predictedRows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  }, [wardenHistory, wardenForecasts]);
+
+  return [...actualRows, ...bridgeRow, ...predictedRows].sort((a, b) =>
+    String(a.date).localeCompare(String(b.date))
+  );
+}, [wardenHistory, wardenForecasts]);
 
 
   const recentHistoryRows = useMemo(() => {
-    const refreshStamp = lastRefreshAt instanceof Date ? lastRefreshAt : new Date(lastRefreshAt);
-
-    const toDateTimeParts = (value, fallbackTime = "23:59:59") => {
-      if (!value) return { sortKey: 0, date: "-", time: "-" };
-      const raw = String(value);
-      const parsed = raw.includes("T") || raw.includes(":") ? new Date(raw) : new Date(`${raw}T${fallbackTime}`);
-      if (Number.isNaN(parsed.getTime())) return { sortKey: 0, date: raw, time: fallbackTime };
-      return {
-        sortKey: parsed.getTime(),
-        date: parsed.toLocaleDateString(),
-        time: parsed.toLocaleTimeString()
-      };
-    };
-
-    const historyRows = (wardenHistory || []).map((item) => {
-      const stamp = toDateTimeParts(item.captured_at || item.timestamp || item.datetime || item.date);
-      return {
-        room_id: item.room_id || selectedRoomFilter || "All",
-        date: stamp.date,
-        time: stamp.time,
-        sortKey: stamp.sortKey,
-        occupied_count: Number(item.occupied_count || 0),
-        empty_count: Number(item.empty_count || 0),
-        warning_count: Number(item.warning_count || 0),
-        violation_count: Number(item.violation_count || 0),
-        inspection_count: Number(item.inspection_count || 0),
-        avg_sound_peak: Number(item.avg_sound_peak || 0),
-        source: item.source || item.source_type || "MongoDB summary"
-      };
-    });
-
-    const liveRoomRows = (rooms || []).map((room) => {
-      const evidenceStamp = room.captured_at ? toDateTimeParts(room.captured_at) : { date: "No evidence", time: "-", sortKey: 0 };
-      const stamp = {
-        sortKey: refreshStamp.getTime(),
-        date: refreshStamp.toLocaleDateString(),
-        time: refreshStamp.toLocaleTimeString()
-      };
-      return {
-        room_id: room.room_id,
-        date: stamp.date,
-        time: stamp.time,
-        sortKey: stamp.sortKey,
-        occupied_count: room.occupancy_stat || "-",
-        empty_count: String(room.occupancy_stat || "").toLowerCase() === "empty" ? 1 : 0,
-        warning_count: room.noise_stat || "-",
-        violation_count: room.needs_inspection ? 1 : 0,
-        inspection_count: room.needs_inspection ? 1 : 0,
-        avg_sound_peak: Number(room.sound_peak || 0),
-        source: room.captured_at ? `Live refresh · evidence ${evidenceStamp.date} ${evidenceStamp.time}` : "Live 8-second refresh"
-      };
-    });
-
-    return [...liveRoomRows, ...historyRows]
-      .sort((a, b) => Number(b.sortKey || 0) - Number(a.sortKey || 0))
-      .slice(0, 12);
-  }, [wardenHistory, rooms, selectedRoomFilter, lastRefreshAt]);
-
+  return liveHistoryLog;
+}, [liveHistoryLog]);
   const generatedInsights = useMemo(() => {
     const highestRiskPattern = [...patternRows].sort((a, b) => Number(b.avg_critical_ratio || 0) - Number(a.avg_critical_ratio || 0))[0];
     const nextForecast = (wardenForecasts || [])[0];
