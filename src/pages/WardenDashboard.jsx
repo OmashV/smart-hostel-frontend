@@ -113,7 +113,7 @@ function roomCardTone(room = {}) {
   return "normal";
 }
 
-function WardenRoomTile({ room }) {
+function WardenRoomTile({ room, liveUpdatedAt }) {
   const tone = roomCardTone(room);
   return (
     <div className={`owner-room-tile ${tone} warden-room-tile`} title={`${room.room_id} current status`}>
@@ -140,7 +140,8 @@ function WardenRoomTile({ room }) {
         <StatusBadge value={room.door_status || "Unknown"} />
       </div>
 
-      <div className="tile-footer">Last Activity <span>{room.captured_at ? formatDate(room.captured_at) : "No Data"}</span></div>
+      <div className="tile-footer">Live Updated <span>{liveUpdatedAt ? liveUpdatedAt.toLocaleTimeString() : "No Data"}</span></div>
+      <div className="tile-source-note">Evidence time: {room.captured_at ? formatDate(room.captured_at) : "No Data"}</div>
     </div>
   );
 }
@@ -401,22 +402,11 @@ export default function WardenDashboard() {
   const recentHistoryRows = useMemo(() => {
     const refreshStamp = lastRefreshAt instanceof Date ? lastRefreshAt : new Date(lastRefreshAt);
 
-    const toDateTimeParts = (value) => {
-      if (!value) {
-        return {
-          sortKey: refreshStamp.getTime(),
-          date: refreshStamp.toLocaleDateString(),
-          time: refreshStamp.toLocaleTimeString()
-        };
-      }
-      const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) {
-        return {
-          sortKey: refreshStamp.getTime(),
-          date: refreshStamp.toLocaleDateString(),
-          time: refreshStamp.toLocaleTimeString()
-        };
-      }
+    const toDateTimeParts = (value, fallbackTime = "23:59:59") => {
+      if (!value) return { sortKey: 0, date: "-", time: "-" };
+      const raw = String(value);
+      const parsed = raw.includes("T") || raw.includes(":") ? new Date(raw) : new Date(`${raw}T${fallbackTime}`);
+      if (Number.isNaN(parsed.getTime())) return { sortKey: 0, date: raw, time: fallbackTime };
       return {
         sortKey: parsed.getTime(),
         date: parsed.toLocaleDateString(),
@@ -424,26 +414,49 @@ export default function WardenDashboard() {
       };
     };
 
-    return (rooms || [])
-      .map((room) => {
-        const stamp = toDateTimeParts(room.captured_at);
-        return {
-          room_id: room.room_id,
-          occupancy_stat: room.occupancy_stat || "No Data",
-          noise_stat: room.noise_stat || "No Data",
-          inspection_status: room.needs_inspection ? "Needs Inspection" : "Normal",
-          door_status: room.door_status || "No Data",
-          motion_count: Number(room.motion_count || room.total_motion_count || 0),
-          avg_sound_peak: Number(room.sound_peak || room.avg_sound_peak || 0),
-          date: stamp.date,
-          time: stamp.time,
-          captured_at: room.captured_at,
-          sortKey: stamp.sortKey
-        };
-      })
+    const historyRows = (wardenHistory || []).map((item) => {
+      const stamp = toDateTimeParts(item.captured_at || item.timestamp || item.datetime || item.date);
+      return {
+        room_id: item.room_id || selectedRoomFilter || "All",
+        date: stamp.date,
+        time: stamp.time,
+        sortKey: stamp.sortKey,
+        occupied_count: Number(item.occupied_count || 0),
+        empty_count: Number(item.empty_count || 0),
+        warning_count: Number(item.warning_count || 0),
+        violation_count: Number(item.violation_count || 0),
+        inspection_count: Number(item.inspection_count || 0),
+        avg_sound_peak: Number(item.avg_sound_peak || 0),
+        source: item.source || item.source_type || "MongoDB summary"
+      };
+    });
+
+    const liveRoomRows = (rooms || []).map((room) => {
+      const evidenceStamp = room.captured_at ? toDateTimeParts(room.captured_at) : { date: "No evidence", time: "-", sortKey: 0 };
+      const stamp = {
+        sortKey: refreshStamp.getTime(),
+        date: refreshStamp.toLocaleDateString(),
+        time: refreshStamp.toLocaleTimeString()
+      };
+      return {
+        room_id: room.room_id,
+        date: stamp.date,
+        time: stamp.time,
+        sortKey: stamp.sortKey,
+        occupied_count: room.occupancy_stat || "-",
+        empty_count: String(room.occupancy_stat || "").toLowerCase() === "empty" ? 1 : 0,
+        warning_count: room.noise_stat || "-",
+        violation_count: room.needs_inspection ? 1 : 0,
+        inspection_count: room.needs_inspection ? 1 : 0,
+        avg_sound_peak: Number(room.sound_peak || 0),
+        source: room.captured_at ? `Live refresh · evidence ${evidenceStamp.date} ${evidenceStamp.time}` : "Live 8-second refresh"
+      };
+    });
+
+    return [...liveRoomRows, ...historyRows]
       .sort((a, b) => Number(b.sortKey || 0) - Number(a.sortKey || 0))
       .slice(0, 12);
-  }, [rooms, lastRefreshAt]);
+  }, [wardenHistory, rooms, selectedRoomFilter, lastRefreshAt]);
 
   const generatedInsights = useMemo(() => {
     const highestRiskPattern = [...patternRows].sort((a, b) => Number(b.avg_critical_ratio || 0) - Number(a.avg_critical_ratio || 0))[0];
@@ -512,6 +525,14 @@ export default function WardenDashboard() {
 
       {error ? <div className="warden-error-box"><strong>Dashboard error:</strong> {error}<button className="warden-retry-btn" onClick={fetchAllData}>Retry</button></div> : null}
 
+      <div className="warden-live-system-strip">
+        <div>
+          <strong>Live Warden System</strong>
+          <span>KPIs, room monitoring, critical alerts, charts, recent history, and insights refresh together every 8 seconds.</span>
+        </div>
+        <div className="warden-live-clock"><span className="live-dot" /> Last refreshed {lastRefreshAt.toLocaleTimeString()}</div>
+      </div>
+
       <div className="stats-grid">
         <KpiCardButton onClick={() => setSelectedKpi("occupied")} title="Click to drill down occupied rooms"><StatCard title="Occupied Rooms" value={displayedOccupied} subtitle="From summary API" icon={<HiOutlineHomeModern />} tone="blue" /></KpiCardButton>
         <KpiCardButton onClick={() => setSelectedKpi("empty")} title="Click to drill down empty rooms"><StatCard title="Empty Rooms" value={displayedEmpty} subtitle="Useful for cleaning allocation" icon={<HiOutlineHomeModern />} tone="green" /></KpiCardButton>
@@ -521,7 +542,7 @@ export default function WardenDashboard() {
 
       <div className="owner-top-grid">
         <SectionCard title="Room Monitoring">
-          {filteredRooms.length ? <div className="room-tile-grid">{filteredRooms.map((room) => <WardenRoomTile key={room.room_id} room={room} />)}</div> : <EmptyState text="No rooms match the selected filters." />}
+          {filteredRooms.length ? <div className="room-tile-grid">{filteredRooms.map((room) => <WardenRoomTile key={room.room_id} room={room} liveUpdatedAt={lastRefreshAt} />)}</div> : <EmptyState text="No rooms match the selected filters." />}
         </SectionCard>
         <SectionCard title="Critical Alerts">
           {roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." />}
@@ -538,51 +559,30 @@ export default function WardenDashboard() {
       </div>
 
       {!isSingleRoom ? (
-        <section className="warden-live-activity-card">
-          <div className="warden-live-card-header">
+        <SectionCard title="Recent Live History">
+          <div className="warden-live-history-head security-style-history-head">
             <div>
-              <h2 className="warden-live-card-title">Recent Live History</h2>
-              <p className="warden-live-card-desc">Latest room activity for real-time warden monitoring.</p>
+              <strong>Recent Live History</strong>
+              <p>Latest warden activity for real-time monitoring, matching the Security recent activity style.</p>
             </div>
-            <span className="warden-live-badge">Live · 8s</span>
+            <span><span className="live-dot" /> Live · every 8s · {lastRefreshAt.toLocaleTimeString()}</span>
           </div>
-
           {recentHistoryRows.length ? (
             <DataTable
               columns={[
-                {
-                  key: "room_id",
-                  label: "Room",
-                  render: (row) => (
-                    <button
-                      type="button"
-                      className="warden-live-room-link"
-                      onClick={() => row.room_id && setSelectedRoomFilter(row.room_id)}
-                    >
-                      {row.room_id}
-                    </button>
-                  )
-                },
-                { key: "occupancy_stat", label: "Occupancy", render: (row) => <HistoryWord value={row.occupancy_stat} /> },
-                { key: "noise_stat", label: "Noise", render: (row) => <HistoryWord value={row.noise_stat} /> },
-                { key: "inspection_status", label: "Inspection", render: (row) => <HistoryWord value={row.inspection_status} /> },
-                { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> },
-                { key: "motion_count", label: "Motion", render: (row) => <span className="warden-live-number">{row.motion_count}</span> },
-                { key: "avg_sound_peak", label: "Noise dB", render: (row) => <span className="warden-live-number">{formatNumber(row.avg_sound_peak)} dB</span> },
-                {
-                  key: "time",
-                  label: "Time",
-                  render: (row) => (
-                    <span className="warden-live-time">
-                      {row.date} · {row.time}
-                    </span>
-                  )
-                }
+                { key: "room_id", label: "Room" },
+                { key: "date", label: "Date" },
+                { key: "time", label: "Time" },
+                { key: "occupied_count", label: "Occupancy / Occupied" },
+                { key: "warning_count", label: "Noise / Warnings", render: (row) => typeof row.warning_count === "string" ? <HistoryWord value={row.warning_count} /> : row.warning_count },
+                { key: "violation_count", label: "Critical / Inspection" },
+                { key: "avg_sound_peak", label: "Avg / Live Noise", render: (row) => `${formatNumber(row.avg_sound_peak)} dB` },
+                { key: "source", label: "Source" }
               ]}
               rows={recentHistoryRows}
             />
-          ) : <EmptyState text="No recent live history." />}
-        </section>
+          ) : <EmptyState text="No recent history available yet." />}
+        </SectionCard>
       ) : null}
 
       {isSingleRoom ? <>
@@ -623,7 +623,7 @@ export default function WardenDashboard() {
         </SectionCard>
       </> : null}
 
-      {selectedKpi ? <div className="warden-modal-overlay" onClick={() => setSelectedKpi(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedKpi === "occupied" && "Occupied Rooms"}{selectedKpi === "empty" && "Empty Rooms"}{selectedKpi === "alerts" && "Critical Alerts"}{selectedKpi === "priority" && "Cleaning Priority"}</h3><button onClick={() => setSelectedKpi(null)}>Close</button></div>{selectedKpi === "occupied" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "noise_stat", label: "Noise", render: (row) => <HistoryWord value={row.noise_stat} /> }, { key: "captured_at", label: "Updated", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={occupiedRows} /> : null}{selectedKpi === "empty" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> }, { key: "captured_at", label: "Updated", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={emptyRows.length ? emptyRows : [selectedRoomData].filter(Boolean)} /> : null}{selectedKpi === "alerts" ? roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-modal-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." /> : null}{selectedKpi === "priority" ? cleaningPriorityRooms.length > 0 ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "priority_type", label: "Priority Type", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" ? "Empty Room Cleaning" : "Inspection Required" }, { key: "inspection_reasons", label: "Reason", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" && !(row.inspection_reasons || []).length ? "Room is empty and ready for cleaning" : renderReasons(row.inspection_reasons) }]} rows={cleaningPriorityRooms} /> : <EmptyState text="No cleaning priority rooms." /> : null}</div></div> : null}
+      {selectedKpi ? <div className="warden-modal-overlay" onClick={() => setSelectedKpi(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedKpi === "occupied" && "Occupied Rooms"}{selectedKpi === "empty" && "Empty Rooms"}{selectedKpi === "alerts" && "Critical Alerts"}{selectedKpi === "priority" && "Cleaning Priority"}</h3><button onClick={() => setSelectedKpi(null)}>Close</button></div>{selectedKpi === "occupied" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "noise_stat", label: "Noise", render: (row) => <HistoryWord value={row.noise_stat} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={occupiedRows} /> : null}{selectedKpi === "empty" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={emptyRows.length ? emptyRows : [selectedRoomData].filter(Boolean)} /> : null}{selectedKpi === "alerts" ? roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-modal-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." /> : null}{selectedKpi === "priority" ? cleaningPriorityRooms.length > 0 ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "priority_type", label: "Priority Type", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" ? "Empty Room Cleaning" : "Inspection Required" }, { key: "inspection_reasons", label: "Reason", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" && !(row.inspection_reasons || []).length ? "Room is empty and ready for cleaning" : renderReasons(row.inspection_reasons) }]} rows={cleaningPriorityRooms} /> : <EmptyState text="No cleaning priority rooms." /> : null}</div></div> : null}
 
       {selectedAlert ? <div className="warden-modal-overlay" onClick={() => setSelectedAlert(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>Critical Alert</h3><button onClick={() => setSelectedAlert(null)}>Close</button></div><div className="warden-single-room-grid"><div className="warden-single-room-card"><h4>Critical Alert Details</h4><p><strong>Room:</strong> {selectedAlert.room_id}</p><p><strong>Severity:</strong> {selectedAlert.severity}</p><p><strong>Model:</strong> {selectedAlert.model_name || "IsolationForest"}</p><p><strong>Confidence:</strong> {Math.round(Number(selectedAlert.confidence || 0) * 100)}%</p><p><strong>Reason:</strong> {selectedAlert.message}</p><p><strong>Detected At:</strong> {selectedAlert.captured_at ? formatDate(selectedAlert.captured_at) : "No Data"}</p></div></div></div></div> : null}
 
