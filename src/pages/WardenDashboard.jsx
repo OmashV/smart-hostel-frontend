@@ -37,6 +37,7 @@ import StatusBadge from "../components/StatusBadge";
 import DataTable from "../components/DataTable";
 import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
+import { useChatbotContext } from "../context/ChatbotContext";
 import { formatDate } from "../utils/format";
 
 const ORDERED_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -227,6 +228,10 @@ function fillSevenDays(history = [], selectedRoom = "All") {
 }
 
 export default function WardenDashboard() {
+  const { registerChatContext, clearChatContext } = useChatbotContext();
+  const registerChatContextRef = useRef(registerChatContext);
+  const clearChatContextRef = useRef(clearChatContext);
+  const handleChatActionsRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState(null);
   const [rooms, setRooms] = useState([]);
@@ -250,6 +255,46 @@ export default function WardenDashboard() {
   const selectedRoomFilterRef = useRef(selectedRoomFilter);
 
   useEffect(() => { selectedRoomFilterRef.current = selectedRoomFilter; }, [selectedRoomFilter]);
+
+  useEffect(() => {
+    registerChatContextRef.current = registerChatContext;
+    clearChatContextRef.current = clearChatContext;
+  }, [registerChatContext, clearChatContext]);
+
+  useEffect(() => {
+    handleChatActionsRef.current = (actions) => {
+      actions.forEach((action) => {
+        if (action.type === "switch_floor") {
+          setSelectedFloor(action.value === "all" ? "All" : action.value);
+          setSelectedRoomFilter("All");
+        }
+
+        if (action.type === "switch_room") {
+          setSelectedRoomFilter(action.value === "all" ? "All" : action.value);
+        }
+      });
+    };
+
+    registerChatContextRef.current({
+      role: "warden",
+      dashboardState: {
+        dashboard: "warden",
+        floorId: selectedFloor,
+        roomId: selectedRoomFilter,
+        selectedFilters: {
+          floorId: selectedFloor,
+          roomId: selectedRoomFilter,
+          onlyAttention
+        },
+        selectedVisual: null
+      },
+      onAction: handleChatActionsRef.current
+    });
+
+    return () => {
+      clearChatContextRef.current();
+    };
+  }, [onlyAttention, selectedFloor, selectedRoomFilter]);
 
   useEffect(() => {
     async function loadFilterOptions() {

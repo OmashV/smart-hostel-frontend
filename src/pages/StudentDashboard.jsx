@@ -41,7 +41,7 @@ export default function StudentDashboard() {
   if (loading) return <LoadingState />;
 
   return (
-    <div className="page-grid">
+    <div className="page-grid owner-dashboard student-dashboard">
       <FilterBar
         roomId={roomId}
         setRoomId={setRoomId}
@@ -66,17 +66,19 @@ export default function StudentDashboard() {
       </SectionCard>
 
       <SectionCard title="My Daily Energy Usage and Waste">
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={history}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="total_energy_kwh" name="Total Energy" strokeWidth={2} />
-            <Line type="monotone" dataKey="wasted_energy_kwh" name="Wasted Energy" strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
+        <div className="chart-shell">
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={history}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 12 }} />
+              <YAxis tick={{ fill: "#64748b", fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="total_energy_kwh" name="Total Energy" stroke="#2563eb" strokeWidth={2.6} />
+              <Line type="monotone" dataKey="wasted_energy_kwh" name="Wasted Energy" stroke="#f59e0b" strokeWidth={2.4} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </SectionCard>
 
       <SectionCard title="My Recent Alerts">
