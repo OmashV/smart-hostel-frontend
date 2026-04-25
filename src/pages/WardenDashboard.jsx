@@ -4,7 +4,8 @@ import {
   HiOutlineExclamationTriangle,
   HiOutlineHomeModern,
   HiOutlineSpeakerWave,
-  HiOutlineWrenchScrewdriver
+  HiOutlineWrenchScrewdriver,
+  HiOutlineEye
 } from "react-icons/hi2";
 import {
   Bar,
@@ -28,8 +29,7 @@ import {
   getWardenPatterns,
   getWardenForecasts,
   getWardenHistory,
-  getWardenMlAlerts,
-  getWardenDataRange
+  getWardenMlAlerts
 } from "../api/client";
 import ChatAssistant from "../components/ChatAssistant";
 import StatCard from "../components/StatCard";
@@ -113,40 +113,40 @@ function roomCardTone(room = {}) {
   return "normal";
 }
 
-function WardenRoomTile({ room }) {
+function WardenRoomTile({ room, onOpen }) {
   const tone = roomCardTone(room);
   return (
-    <div className={`owner-room-tile ${tone} warden-room-tile`} title={`${room.room_id} current status`}>
+    <button type="button" className={`owner-room-tile ${tone} warden-room-tile warden-room-card-minimal`} title={`Open ${room.room_id} details`} onClick={() => onOpen(room)}>
       <div className="tile-top">
         <div>
           <h3>{valueOrDash(room.room_id)}</h3>
-          <p className="tile-subtext">Owner-style room overview</p>
+          <p className="tile-subtext">Live room status</p>
         </div>
         <span className={`tile-dot ${tone === "critical" ? "red" : tone === "warning" ? "orange" : "green"}`} />
       </div>
 
-      {room.needs_inspection ? <div className="tile-alert-pill">Needs Inspection</div> : null}
-
-      <div className="tile-metrics">
-        <div className="tile-row"><span>Occupancy</span><strong>{valueOrDash(room.occupancy_stat)}</strong></div>
-        <div className="tile-row"><span>Noise</span><strong>{valueOrDash(room.noise_stat)}</strong></div>
-        <div className="tile-row"><span>Door</span><strong>{valueOrDash(room.door_status)}</strong></div>
-        <div className="tile-row"><span>Current</span><strong>{Number(room.current_amp || 0)} A</strong></div>
-      </div>
-
-      <div className="tile-badges">
+      <div className="warden-room-card-center">
         <StatusBadge value={room.occupancy_stat || "Unknown"} />
-        <StatusBadge value={room.noise_stat || "Unknown"} />
-        <StatusBadge value={room.door_status || "Unknown"} />
+        <strong>{valueOrDash(room.noise_stat)}</strong>
+        <span>{formatNumber(room.sound_peak)} dB</span>
       </div>
+
+      <div className="tile-metrics compact">
+        <div className="tile-row"><span>Door</span><strong>{valueOrDash(room.door_status)}</strong></div>
+        <div className="tile-row"><span>Current</span><strong>{formatNumber(room.current_amp, 3)} A</strong></div>
+      </div>
+
+      {room.needs_inspection ? <div className="tile-alert-pill">Needs Inspection</div> : <div className="tile-ok-pill">Stable</div>}
 
       <div className="tile-footer">Last Activity <span>{room.captured_at ? formatDate(room.captured_at) : "No Data"}</span></div>
-    </div>
+      <div className="tile-open-hint"><HiOutlineEye size={15} /> Click for drill-down</div>
+    </button>
   );
 }
 
 function WardenAlertCard({ alert, onOpen }) {
   const severity = alert.severity || "Critical";
+  const displayedAt = alert.display_at || alert.generated_at || alert.updatedAt || alert.createdAt || alert.captured_at;
   return (
     <button type="button" className={`warden-alert-button alert-card ${severity === "Critical" ? "critical" : "warning"}`} onClick={() => onOpen(alert)}>
       <div className="alert-card-head">
@@ -157,7 +157,7 @@ function WardenAlertCard({ alert, onOpen }) {
         <StatusBadge value={severity} />
       </div>
       <p className="alert-card-message">{alert.reason || alert.message || "ML-generated critical alert"}</p>
-      <div className="alert-card-foot"><span>{valueOrDash(alert.room_id)}</span><span>{alert.captured_at ? formatDate(alert.captured_at) : "No Data"}</span></div>
+      <div className="alert-card-foot"><span>{valueOrDash(alert.room_id)}</span><span>{displayedAt ? formatDate(displayedAt) : "No Data"}</span></div>
       <div className="alert-card-foot"><span>{alert.model_name || "IsolationForest"}</span><span>{alert.confidence !== undefined ? `${Math.round(Number(alert.confidence || 0) * 100)}% confidence` : "ML confidence"}</span></div>
     </button>
   );
@@ -187,27 +187,30 @@ function toShortLabel(dateString) {
   return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
 }
 
-function getLastNDates(days = 7) {
+function getLastNDates(days = 7, endDateString) {
   const dates = [];
-  const today = new Date();
+  const endDate = endDateString ? new Date(`${endDateString}T00:00:00`) : new Date();
+  const safeEndDate = Number.isNaN(endDate.getTime()) ? new Date() : endDate;
   for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
+    const d = new Date(safeEndDate);
+    d.setDate(safeEndDate.getDate() - i);
     dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
   }
   return dates;
 }
 
 function fillSevenDays(history = [], selectedRoom = "All") {
-  const byDate = new Map((history || []).map((item) => [item.date, item]));
-  return getLastNDates(7).map((date) => {
+  const rows = Array.isArray(history) ? history : [];
+  const byDate = new Map(rows.map((item) => [item.date, item]));
+  const latestDate = rows.map((item) => item.date).filter(Boolean).sort().pop();
+  return getLastNDates(7, latestDate).map((date) => {
     const found = byDate.get(date);
     const occupied = Number(found?.occupied_count || 0);
     const empty = Number(found?.empty_count || 0);
     const warning = Number(found?.warning_count || 0);
     const violation = Number(found?.violation_count || 0);
     const criticalNoiseCount = warning + violation;
-    const totalBase = selectedRoom === "All" ? occupied + empty : 1;
+    const totalBase = selectedRoom === "All" ? occupied + empty : Math.max(occupied + empty, 1);
     return {
       date,
       label: toShortLabel(date),
@@ -236,6 +239,7 @@ export default function WardenDashboard() {
   const [onlyAttention, setOnlyAttention] = useState(false);
   const [selectedKpi, setSelectedKpi] = useState(null);
   const [selectedAlert, setSelectedAlert] = useState(null);
+  const [selectedRoomModal, setSelectedRoomModal] = useState(null);
   const [mlAlerts, setMlAlerts] = useState([]);
   const [wardenForecasts, setWardenForecasts] = useState([]);
   const [wardenAnomalies, setWardenAnomalies] = useState([]);
@@ -285,8 +289,7 @@ export default function WardenDashboard() {
         getWardenAnomalies(roomId),
         getWardenPatterns(roomId),
         getWardenFeatureImportance(),
-        getWardenHistory(roomId),
-        getWardenDataRange(roomId).catch(() => null)
+        getWardenHistory(roomId)
       ]);
       setSummary(summaryRes || null);
       setRooms(roomsRes?.rooms || []);
@@ -462,12 +465,13 @@ export default function WardenDashboard() {
     const nextForecast = (wardenForecasts || [])[0];
     const latestAnomaly = (wardenAnomalies || [])[0];
     const topFeature = (wardenFeatureImportance || [])[0];
-    const inspectionReason = filteredRooms.find((room) => room.needs_inspection)?.inspection_reasons?.[0];
+    const inspectionRooms = rooms.filter((room) => room.needs_inspection);
+    const inspectionReason = inspectionRooms.find((room) => room.inspection_reasons?.length)?.inspection_reasons?.[0];
 
     return [
       {
         title: "Inspection priority",
-        value: `${cleaningPriorityRooms.length} room${cleaningPriorityRooms.length === 1 ? "" : "s"}`,
+        value: `${inspectionRooms.length} room${inspectionRooms.length === 1 ? "" : "s"}`,
         detail: inspectionReason || "Priority is generated from current room status and ML alert/anomaly evidence."
       },
       {
@@ -491,7 +495,7 @@ export default function WardenDashboard() {
         detail: topFeature ? `Model importance ${formatNumber(topFeature.importance, 4)} from the Warden feature-importance output.` : "Feature importance appears after the ML pipeline is run."
       }
     ];
-  }, [patternRows, wardenForecasts, wardenAnomalies, wardenFeatureImportance, filteredRooms, cleaningPriorityRooms, selectedRoomFilter]);
+  }, [patternRows, wardenForecasts, wardenAnomalies, wardenFeatureImportance, rooms, selectedRoomFilter]);
 
   const isSingleRoom = selectedRoomFilter !== "All" && !onlyAttention;
   const displayedOccupied = selectedRoomFilter === "All" || onlyAttention ? summary?.occupied_rooms ?? 0 : selectedRoomData?.occupancy_stat === "Occupied" ? 1 : 0;
@@ -524,13 +528,6 @@ export default function WardenDashboard() {
 
       {error ? <div className="warden-error-box"><strong>Dashboard error:</strong> {error}<button className="warden-retry-btn" onClick={fetchAllData}>Retry</button></div> : null}
 
-      <div className="warden-live-system-strip">
-        <div>
-          <strong>Live Warden System</strong>
-          <span>KPIs, room monitoring, critical alerts, charts, recent history, and insights refresh together every 8 seconds.</span>
-        </div>
-        <div className="warden-live-clock"><span className="live-dot" /> Last refreshed {lastRefreshAt.toLocaleTimeString()}</div>
-      </div>
 
       <div className="stats-grid">
         <KpiCardButton onClick={() => setSelectedKpi("occupied")} title="Click to drill down occupied rooms"><StatCard title="Occupied Rooms" value={displayedOccupied} subtitle="From summary API" icon={<HiOutlineHomeModern />} tone="blue" /></KpiCardButton>
@@ -541,7 +538,7 @@ export default function WardenDashboard() {
 
       <div className="owner-top-grid">
         <SectionCard title="Room Monitoring">
-          {filteredRooms.length ? <div className="room-tile-grid">{filteredRooms.map((room) => <WardenRoomTile key={room.room_id} room={room} />)}</div> : <EmptyState text="No rooms match the selected filters." />}
+          {filteredRooms.length ? <div className="room-tile-grid">{filteredRooms.map((room) => <WardenRoomTile key={room.room_id} room={room} onOpen={setSelectedRoomModal} />)}</div> : <EmptyState text="No rooms match the selected filters." />}
         </SectionCard>
         <SectionCard title="Critical Alerts">
           {roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." />}
@@ -584,6 +581,21 @@ export default function WardenDashboard() {
         </SectionCard>
       ) : null}
 
+      <SectionCard title="Insight Generation">
+        <div className="warden-insight-grid">
+          {generatedInsights.map((insight, index) => (
+            <div className="warden-insight-card" key={insight.title}>
+              <div className="warden-insight-card-top">
+                <span className="warden-insight-index">{index + 1}</span>
+                <span>{insight.title}</span>
+              </div>
+              <strong>{insight.value}</strong>
+              <p>{insight.detail}</p>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
       {isSingleRoom ? <>
         <SectionCard title="Historical and Forecasted Room Trend">
           {forecastChartData.length ? <div className="chart-shell owner-forecast-chart-shell"><ResponsiveContainer width="100%" height={360}><LineChart data={forecastChartData} margin={{ top: 10, right: 24, left: 6, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" /><XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} minTickGap={24} /><YAxis tick={{ fill: "#64748b", fontSize: 11 }} allowDecimals={false} /><Tooltip contentStyle={chartTooltipStyle} /><Legend content={renderForecastLegend} /><Line type="monotone" dataKey="actual_occupancy" name="Actual Occupancy" stroke="#2563eb" strokeWidth={2.4} dot={false} connectNulls /><Line type="monotone" dataKey="actual_warnings" name="Actual Warnings" stroke="#f59e0b" strokeWidth={2.2} dot={false} connectNulls /><Line type="monotone" dataKey="predicted_occupancy" name="Predicted Occupancy" stroke="#2563eb" strokeWidth={2.4} strokeDasharray="7 5" dot={false} connectNulls /><Line type="monotone" dataKey="predicted_warnings" name="Predicted Warnings" stroke="#f59e0b" strokeWidth={2.2} strokeDasharray="7 5" dot={false} connectNulls /></LineChart></ResponsiveContainer></div> : <EmptyState text="No forecast or history data available for this room." />}
@@ -606,25 +618,13 @@ export default function WardenDashboard() {
           </SectionCard>
         </div>
 
-        <SectionCard title="Insight Generation">
-          <div className="warden-insight-stack">
-            {generatedInsights.map((insight, index) => (
-              <div className="warden-insight-step" key={insight.title}>
-                <div className="warden-insight-index">{index + 1}</div>
-                <div className="warden-insight-body">
-                  <span>{insight.title}</span>
-                  <strong>{insight.value}</strong>
-                  <p>{insight.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
       </> : null}
 
       {selectedKpi ? <div className="warden-modal-overlay" onClick={() => setSelectedKpi(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedKpi === "occupied" && "Occupied Rooms"}{selectedKpi === "empty" && "Empty Rooms"}{selectedKpi === "alerts" && "Critical Alerts"}{selectedKpi === "priority" && "Cleaning Priority"}</h3><button onClick={() => setSelectedKpi(null)}>Close</button></div>{selectedKpi === "occupied" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "noise_stat", label: "Noise", render: (row) => <HistoryWord value={row.noise_stat} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={occupiedRows} /> : null}{selectedKpi === "empty" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={emptyRows.length ? emptyRows : [selectedRoomData].filter(Boolean)} /> : null}{selectedKpi === "alerts" ? roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-modal-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." /> : null}{selectedKpi === "priority" ? cleaningPriorityRooms.length > 0 ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "priority_type", label: "Priority Type", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" ? "Empty Room Cleaning" : "Inspection Required" }, { key: "inspection_reasons", label: "Reason", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" && !(row.inspection_reasons || []).length ? "Room is empty and ready for cleaning" : renderReasons(row.inspection_reasons) }]} rows={cleaningPriorityRooms} /> : <EmptyState text="No cleaning priority rooms." /> : null}</div></div> : null}
 
-      {selectedAlert ? <div className="warden-modal-overlay" onClick={() => setSelectedAlert(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>Critical Alert</h3><button onClick={() => setSelectedAlert(null)}>Close</button></div><div className="warden-single-room-grid"><div className="warden-single-room-card"><h4>Critical Alert Details</h4><p><strong>Room:</strong> {selectedAlert.room_id}</p><p><strong>Severity:</strong> {selectedAlert.severity}</p><p><strong>Model:</strong> {selectedAlert.model_name || "IsolationForest"}</p><p><strong>Confidence:</strong> {Math.round(Number(selectedAlert.confidence || 0) * 100)}%</p><p><strong>Reason:</strong> {selectedAlert.message}</p><p><strong>Detected At:</strong> {selectedAlert.captured_at ? formatDate(selectedAlert.captured_at) : "No Data"}</p></div></div></div></div> : null}
+      {selectedRoomModal ? <div className="warden-modal-overlay" onClick={() => setSelectedRoomModal(null)}><div className="warden-modal warden-room-detail-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedRoomModal.room_id} Room Drill-down</h3><button onClick={() => setSelectedRoomModal(null)}>Close</button></div><div className="warden-room-detail-grid"><div className="warden-single-room-card"><h4>Current Status</h4><p><strong>Occupancy:</strong> {selectedRoomModal.occupancy_stat}</p><p><strong>Noise:</strong> {selectedRoomModal.noise_stat} · {formatNumber(selectedRoomModal.sound_peak)} dB</p><p><strong>Door:</strong> {selectedRoomModal.door_status}</p><p><strong>Current:</strong> {formatNumber(selectedRoomModal.current_amp, 3)} A</p><p><strong>Last Activity:</strong> {selectedRoomModal.captured_at ? formatDate(selectedRoomModal.captured_at) : "No Data"}</p></div><div className="warden-single-room-card"><h4>Inspection Evidence</h4><p><strong>Needs Inspection:</strong> {selectedRoomModal.needs_inspection ? "Yes" : "No"}</p><p><strong>Reasons:</strong> {renderReasons(selectedRoomModal.inspection_reasons)}</p><p><strong>Motion Count:</strong> {valueOrDash(selectedRoomModal.motion_count)}</p><p><strong>Sensor Faults:</strong> {renderFaults(selectedRoomModal.sensor_faults)}</p></div></div></div></div> : null}
+
+      {selectedAlert ? <div className="warden-modal-overlay" onClick={() => setSelectedAlert(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>Critical Alert</h3><button onClick={() => setSelectedAlert(null)}>Close</button></div><div className="warden-single-room-grid"><div className="warden-single-room-card"><h4>Critical Alert Details</h4><p><strong>Room:</strong> {selectedAlert.room_id}</p><p><strong>Severity:</strong> {selectedAlert.severity}</p><p><strong>Model:</strong> {selectedAlert.model_name || "IsolationForest"}</p><p><strong>Confidence:</strong> {Math.round(Number(selectedAlert.confidence || 0) * 100)}%</p><p><strong>Reason:</strong> {selectedAlert.message || selectedAlert.reason}</p><p><strong>Displayed At:</strong> {(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) ? formatDate(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) : "No Data"}</p><p><strong>ML Evidence Time:</strong> {selectedAlert.captured_at ? formatDate(selectedAlert.captured_at) : "No Data"}</p></div></div></div></div> : null}
 
       <ChatAssistant roomId={selectedRoomFilter} />
     </div>
