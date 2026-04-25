@@ -401,11 +401,22 @@ export default function WardenDashboard() {
   const recentHistoryRows = useMemo(() => {
     const refreshStamp = lastRefreshAt instanceof Date ? lastRefreshAt : new Date(lastRefreshAt);
 
-    const toDateTimeParts = (value, fallbackTime = "23:59:59") => {
-      if (!value) return { sortKey: 0, date: "-", time: "-" };
-      const raw = String(value);
-      const parsed = raw.includes("T") || raw.includes(":") ? new Date(raw) : new Date(`${raw}T${fallbackTime}`);
-      if (Number.isNaN(parsed.getTime())) return { sortKey: 0, date: raw, time: fallbackTime };
+    const toDateTimeParts = (value) => {
+      if (!value) {
+        return {
+          sortKey: refreshStamp.getTime(),
+          date: refreshStamp.toLocaleDateString(),
+          time: refreshStamp.toLocaleTimeString()
+        };
+      }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return {
+          sortKey: refreshStamp.getTime(),
+          date: refreshStamp.toLocaleDateString(),
+          time: refreshStamp.toLocaleTimeString()
+        };
+      }
       return {
         sortKey: parsed.getTime(),
         date: parsed.toLocaleDateString(),
@@ -413,48 +424,26 @@ export default function WardenDashboard() {
       };
     };
 
-    const historyRows = (wardenHistory || []).map((item) => {
-      const stamp = toDateTimeParts(item.captured_at || item.timestamp || item.datetime || item.date);
-      return {
-        room_id: item.room_id || selectedRoomFilter || "All",
-        date: stamp.date,
-        time: stamp.time,
-        sortKey: stamp.sortKey,
-        occupied_count: Number(item.occupied_count || 0),
-        empty_count: Number(item.empty_count || 0),
-        warning_count: Number(item.warning_count || 0),
-        violation_count: Number(item.violation_count || 0),
-        inspection_count: Number(item.inspection_count || 0),
-        avg_sound_peak: Number(item.avg_sound_peak || 0),
-        source: item.source || item.source_type || "MongoDB summary"
-      };
-    });
-
-    const liveRoomRows = (rooms || []).map((room) => {
-      const stamp = room.captured_at ? toDateTimeParts(room.captured_at) : {
-        sortKey: refreshStamp.getTime(),
-        date: refreshStamp.toLocaleDateString(),
-        time: refreshStamp.toLocaleTimeString()
-      };
-      return {
-        room_id: room.room_id,
-        date: stamp.date,
-        time: stamp.time,
-        sortKey: stamp.sortKey,
-        occupied_count: room.occupancy_stat || "-",
-        empty_count: String(room.occupancy_stat || "").toLowerCase() === "empty" ? 1 : 0,
-        warning_count: room.noise_stat || "-",
-        violation_count: room.needs_inspection ? 1 : 0,
-        inspection_count: room.needs_inspection ? 1 : 0,
-        avg_sound_peak: Number(room.sound_peak || 0),
-        source: room.captured_at ? "Latest sensor status" : "Live 8-second refresh"
-      };
-    });
-
-    return [...liveRoomRows, ...historyRows]
+    return (rooms || [])
+      .map((room) => {
+        const stamp = toDateTimeParts(room.captured_at);
+        return {
+          room_id: room.room_id,
+          occupancy_stat: room.occupancy_stat || "No Data",
+          noise_stat: room.noise_stat || "No Data",
+          inspection_status: room.needs_inspection ? "Needs Inspection" : "Normal",
+          door_status: room.door_status || "No Data",
+          motion_count: Number(room.motion_count || room.total_motion_count || 0),
+          avg_sound_peak: Number(room.sound_peak || room.avg_sound_peak || 0),
+          date: stamp.date,
+          time: stamp.time,
+          captured_at: room.captured_at,
+          sortKey: stamp.sortKey
+        };
+      })
       .sort((a, b) => Number(b.sortKey || 0) - Number(a.sortKey || 0))
       .slice(0, 12);
-  }, [wardenHistory, rooms, selectedRoomFilter, lastRefreshAt]);
+  }, [rooms, lastRefreshAt]);
 
   const generatedInsights = useMemo(() => {
     const highestRiskPattern = [...patternRows].sort((a, b) => Number(b.avg_critical_ratio || 0) - Number(a.avg_critical_ratio || 0))[0];
@@ -549,30 +538,51 @@ export default function WardenDashboard() {
       </div>
 
       {!isSingleRoom ? (
-        <SectionCard title="Recent Live History">
-          <div className="warden-live-history-head">
+        <section className="warden-live-activity-card">
+          <div className="warden-live-card-header">
             <div>
-              <strong>Auto-updating activity feed</strong>
-              <p>Shows latest room status plus recent MongoDB summary records.</p>
+              <h2 className="warden-live-card-title">Recent Live History</h2>
+              <p className="warden-live-card-desc">Latest room activity for real-time warden monitoring.</p>
             </div>
-            <span>Refreshes every 8s · Last update {lastRefreshAt.toLocaleTimeString()}</span>
+            <span className="warden-live-badge">Live · 8s</span>
           </div>
+
           {recentHistoryRows.length ? (
             <DataTable
               columns={[
-                { key: "room_id", label: "Room" },
-                { key: "date", label: "Date" },
-                { key: "time", label: "Time" },
-                { key: "occupied_count", label: "Occupancy / Occupied" },
-                { key: "warning_count", label: "Noise / Warnings", render: (row) => typeof row.warning_count === "string" ? <HistoryWord value={row.warning_count} /> : row.warning_count },
-                { key: "violation_count", label: "Critical / Inspection" },
-                { key: "avg_sound_peak", label: "Avg / Live Noise", render: (row) => `${formatNumber(row.avg_sound_peak)} dB` },
-                { key: "source", label: "Source" }
+                {
+                  key: "room_id",
+                  label: "Room",
+                  render: (row) => (
+                    <button
+                      type="button"
+                      className="warden-live-room-link"
+                      onClick={() => row.room_id && setSelectedRoomFilter(row.room_id)}
+                    >
+                      {row.room_id}
+                    </button>
+                  )
+                },
+                { key: "occupancy_stat", label: "Occupancy", render: (row) => <HistoryWord value={row.occupancy_stat} /> },
+                { key: "noise_stat", label: "Noise", render: (row) => <HistoryWord value={row.noise_stat} /> },
+                { key: "inspection_status", label: "Inspection", render: (row) => <HistoryWord value={row.inspection_status} /> },
+                { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> },
+                { key: "motion_count", label: "Motion", render: (row) => <span className="warden-live-number">{row.motion_count}</span> },
+                { key: "avg_sound_peak", label: "Noise dB", render: (row) => <span className="warden-live-number">{formatNumber(row.avg_sound_peak)} dB</span> },
+                {
+                  key: "time",
+                  label: "Time",
+                  render: (row) => (
+                    <span className="warden-live-time">
+                      {row.date} · {row.time}
+                    </span>
+                  )
+                }
               ]}
               rows={recentHistoryRows}
             />
-          ) : <EmptyState text="No recent history available yet." />}
-        </SectionCard>
+          ) : <EmptyState text="No recent live history." />}
+        </section>
       ) : null}
 
       {isSingleRoom ? <>
