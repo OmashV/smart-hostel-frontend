@@ -12,8 +12,7 @@ const items = [
   { to: "/owner", label: "Owner", icon: <HiOutlineHome /> },
   { to: "/warden", label: "Warden", icon: <HiOutlineBuildingOffice2 /> },
   { to: "/security", label: "Security", icon: <HiOutlineShieldCheck /> },
-  { to: "/student", label: "Student", icon: <HiOutlineUser /> },
-  { to: "/design-notes", label: "Design Notes", icon: <HiOutlineDocumentText /> }
+  { to: "/student", label: "Student", icon: <HiOutlineUser /> }
 ];
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
