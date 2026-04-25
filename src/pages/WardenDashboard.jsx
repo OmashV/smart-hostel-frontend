@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   HiOutlineBellAlert,
   HiOutlineExclamationTriangle,
@@ -113,7 +113,7 @@ function roomCardTone(room = {}) {
   return "normal";
 }
 
-function WardenRoomTile({ room, liveUpdatedAt }) {
+function WardenRoomTile({ room }) {
   const tone = roomCardTone(room);
   return (
     <div className={`owner-room-tile ${tone} warden-room-tile`} title={`${room.room_id} current status`}>
@@ -140,8 +140,7 @@ function WardenRoomTile({ room, liveUpdatedAt }) {
         <StatusBadge value={room.door_status || "Unknown"} />
       </div>
 
-      <div className="tile-footer">Live Updated <span>{liveUpdatedAt ? liveUpdatedAt.toLocaleTimeString() : "No Data"}</span></div>
-      <div className="tile-source-note">Evidence time: {room.captured_at ? formatDate(room.captured_at) : "No Data"}</div>
+      <div className="tile-footer">Last Activity <span>{room.captured_at ? formatDate(room.captured_at) : "No Data"}</span></div>
     </div>
   );
 }
@@ -274,7 +273,7 @@ export default function WardenDashboard() {
     loadRoomsForFloor();
   }, [selectedFloor]);
 
-  const fetchAllData = useCallback(async () => {
+  async function fetchAllData() {
     try {
       setError("");
       const roomId = selectedRoomFilterRef.current;
@@ -289,11 +288,6 @@ export default function WardenDashboard() {
         getWardenHistory(roomId),
         getWardenDataRange(roomId).catch(() => null)
       ]);
-
-      // Owner-style live update: every poll creates a fresh dashboard refresh
-      // timestamp while MongoDB evidence time is displayed separately.
-      const refreshTime = new Date();
-
       setSummary(summaryRes || null);
       setRooms(roomsRes?.rooms || []);
       setMlAlerts(alertsRes?.items || []);
@@ -302,37 +296,19 @@ export default function WardenDashboard() {
       setWardenPatterns(patternRes?.items || []);
       setWardenFeatureImportance(featureImportanceRes?.items || []);
       setWardenHistory(historyRes?.items || historyRes?.history || []);
-      setLastRefreshAt(refreshTime);
+      setLastRefreshAt(new Date());
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load warden dashboard data.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
   useEffect(() => {
-    let timeoutId;
-    let cancelled = false;
-
-    async function loop() {
-      const startedAt = Date.now();
-      await fetchAllData();
-
-      if (cancelled) return;
-
-      const elapsed = Date.now() - startedAt;
-      const delay = Math.max(8000 - elapsed, 0);
-      timeoutId = setTimeout(loop, delay);
-    }
-
-    setLoading(true);
-    loop();
-
-    return () => {
-      cancelled = true;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [fetchAllData, selectedRoomFilter]);
+    fetchAllData();
+    const interval = setInterval(fetchAllData, 8000);
+    return () => clearInterval(interval);
+  }, [selectedRoomFilter]);
 
   const floors = useMemo(() => {
     const derived = Array.from(new Set(rooms.map((room) => getFloor(room)))).sort();
@@ -565,7 +541,7 @@ export default function WardenDashboard() {
 
       <div className="owner-top-grid">
         <SectionCard title="Room Monitoring">
-          {filteredRooms.length ? <div className="room-tile-grid">{filteredRooms.map((room) => <WardenRoomTile key={room.room_id} room={room} liveUpdatedAt={lastRefreshAt} />)}</div> : <EmptyState text="No rooms match the selected filters." />}
+          {filteredRooms.length ? <div className="room-tile-grid">{filteredRooms.map((room) => <WardenRoomTile key={room.room_id} room={room} />)}</div> : <EmptyState text="No rooms match the selected filters." />}
         </SectionCard>
         <SectionCard title="Critical Alerts">
           {roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." />}
