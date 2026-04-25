@@ -20,6 +20,7 @@ import {
   getSecurityTrend,
   getSecurityAnomalies
 } from "../api/client";
+import { useChatbotContext } from "../context/ChatbotContext";
 
 import DataTable from "../components/DataTable";
 import LoadingState from "../components/LoadingState";
@@ -124,6 +125,8 @@ function RefreshButton({ onClick, loading }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function SecurityDashboard() {
+  const { registerChatContext, clearChatContext } = useChatbotContext();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState("all");
@@ -167,6 +170,20 @@ export default function SecurityDashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    registerChatContext({
+      role: "security",
+      dashboardState: {
+        floorId: "all",
+        roomId: selectedRoom
+      }
+    });
+
+    return () => {
+      clearChatContext();
+    };
+  }, [registerChatContext, clearChatContext, selectedRoom]);
 
   useEffect(() => {
     const id = setInterval(load, 30000);
@@ -332,39 +349,41 @@ export default function SecurityDashboard() {
         )}
       </div>
 
-      <div style={styles.kpiGrid}>
-        <KpiCard
-          label="Active Alerts"
-          value={summary?.active_security_alerts ?? 0}
-          accent="#ef4444"
-          icon="🚨"
-        />
-        <KpiCard
-          label="Suspicious Rooms"
-          value={summary?.suspicious_rooms ?? 0}
-          accent="#f97316"
-          icon="🚪"
-        />
-        <KpiCard
-          label="High-Risk Rooms"
-          value={summary?.high_risk_rooms ?? 0}
-          accent="#eab308"
-          icon="⚠️"
-        />
-        <KpiCard
-          label="After-Hours Events"
-          value={summary?.after_hours_events ?? 0}
-          accent="#8b5cf6"
-          icon="🌙"
-        />
-        <KpiCard
-          label="ML Anomalies"
-          value={anomalies.length}
-          accent="#06b6d4"
-          icon="🤖"
-          tag="Isolation Forest"
-        />
-      </div>
+      {selectedRoom === "all" && (
+        <div style={styles.kpiGrid}>
+          <KpiCard
+            label="Active Alerts"
+            value={summary?.active_security_alerts ?? 0}
+            accent="#ef4444"
+            icon="🚨"
+          />
+          <KpiCard
+            label="Suspicious Rooms"
+            value={summary?.suspicious_rooms ?? 0}
+            accent="#f97316"
+            icon="🚪"
+          />
+          <KpiCard
+            label="High-Risk Rooms"
+            value={summary?.high_risk_rooms ?? 0}
+            accent="#eab308"
+            icon="⚠️"
+          />
+          <KpiCard
+            label="After-Hours Events"
+            value={summary?.after_hours_events ?? 0}
+            accent="#8b5cf6"
+            icon="🌙"
+          />
+          <KpiCard
+            label="ML Anomalies"
+            value={anomalies.length}
+            accent="#06b6d4"
+            icon="🤖"
+            tag="Isolation Forest"
+          />
+        </div>
+      )}
 
       <section style={styles.card}>
         <div style={styles.cardHeader}>
