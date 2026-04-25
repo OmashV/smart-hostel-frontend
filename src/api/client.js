@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL
 });
 
@@ -29,6 +29,13 @@ export async function getOwnerKpis(roomId = "A101") {
 export async function getOwnerRoomsOverview(floorId) {
   const { data } = await api.get("/rooms/owner/rooms-overview", {
     params: floorId && floorId !== "All" && floorId !== "all" ? { floorId } : {}
+  });
+  return data;
+}
+
+export async function getOwnerOverviewSnapshot(floorId = "all") {
+  const { data } = await api.get("/rooms/owner/overview-snapshot", {
+    params: { floorId }
   });
   return data;
 }
@@ -105,6 +112,13 @@ export async function getWardenSummary(roomId = "All") {
   const { data } = await api.get("/rooms/warden/summary", {
     params: { roomId }
   });
+
+export async function chatWithDashboardAgent(payload) {
+  const { data } = await api.post("/chat", payload);
+  return data;
+}
+
+
   return data;
 }
 
@@ -160,6 +174,7 @@ export async function getSecurityDoorEvents(roomId, limit = 50) {
   return data;
 }
 
+
 export async function getSecurityTrend(roomId, limit = 200) {
   const { data } = await api.get(`/rooms/security/trend`, {
     params: {
@@ -179,7 +194,6 @@ export async function getSecurityAnomalies(roomId, limit = 50) {
   });
   return data;
 }
-
 
 export async function getStudentOverview(roomId = "A101") {
   const { data } = await api.get(`/rooms/student/${roomId}/overview`);
@@ -241,3 +255,4 @@ export async function getWardenDataRange(roomId = "All") {
   });
   return res.data;
 }
+
