@@ -128,39 +128,68 @@ function WardenRoomTile({ room, onOpen }) {
       </div>
 
       <div className="warden-room-card-center">
-        <StatusBadge value={room.occupancy_stat || "Unknown"} />
-        <strong>{valueOrDash(room.noise_stat)}</strong>
-        <span>{formatNumber(room.sound_peak)} dB</span>
+        <StatusBadge value={friendlyOccupancy(room.occupancy_stat)} />
+<strong>{friendlyNoise(room.noise_stat)}</strong>
+<span>{formatNumber(room.sound_peak)} dB noise</span>
       </div>
 
       <div className="tile-metrics compact">
-        <div className="tile-row"><span>Door</span><strong>{valueOrDash(room.door_status)}</strong></div>
-        <div className="tile-row"><span>Current</span><strong>{formatNumber(room.current_amp, 3)} A</strong></div>
+        <div className="tile-row">
+  <span>Door</span>
+  <strong>{friendlyDoor(room.door_status)}</strong>
+</div>
+
+<div className="tile-row">
+  <span>Power Use</span>
+  <strong>{formatNumber(room.current_amp, 2)} A</strong>
+</div>
       </div>
 
-      {room.needs_inspection ? <div className="tile-alert-pill">Needs Inspection</div> : <div className="tile-ok-pill">Stable</div>}
-
-      <div className="tile-footer">Last Activity <span>{room.captured_at ? formatDate(room.captured_at) : "No Data"}</span></div>
-      <div className="tile-open-hint"><HiOutlineEye size={15} /> Click for drill-down</div>
+      {room.needs_inspection ? 
+  <div className="tile-alert-pill">Check this room</div> : 
+  <div className="tile-ok-pill">Everything OK</div>}
     </button>
   );
 }
 
 function WardenAlertCard({ alert, onOpen }) {
   const severity = alert.severity || "Critical";
-  const displayedAt = alert.display_at || alert.generated_at || alert.updatedAt || alert.createdAt || alert.captured_at;
+  const displayedAt =
+    alert.display_at ||
+    alert.generated_at ||
+    alert.updatedAt ||
+    alert.createdAt ||
+    alert.captured_at;
+
   return (
-    <button type="button" className={`warden-alert-button alert-card ${severity === "Critical" ? "critical" : "warning"}`} onClick={() => onOpen(alert)}>
+    <button
+      type="button"
+      className={`warden-alert-button alert-card ${
+        severity === "Critical" ? "critical" : "warning"
+      }`}
+      onClick={() => onOpen(alert)}
+    >
       <div className="alert-card-head">
         <div className="alert-card-title">
           <HiOutlineExclamationTriangle size={18} />
-          <strong>Critical Alert</strong>
+          <strong>{friendlyAlertTitle(alert)}</strong>
         </div>
-        <StatusBadge value={severity} />
+        <StatusBadge value={severity === "Critical" ? "Urgent" : "Check"} />
       </div>
-      <p className="alert-card-message">{alert.reason || alert.message || "ML-generated critical alert"}</p>
-      <div className="alert-card-foot"><span>{valueOrDash(alert.room_id)}</span><span>{displayedAt ? formatDate(displayedAt) : "No Data"}</span></div>
-      <div className="alert-card-foot"><span>{alert.model_name || "IsolationForest"}</span><span>{alert.confidence !== undefined ? `${Math.round(Number(alert.confidence || 0) * 100)}% confidence` : "ML confidence"}</span></div>
+
+      <p className="alert-card-message">
+        {friendlyAlertReason(alert)}
+      </p>
+
+      <div className="alert-card-foot">
+        <span>Room {valueOrDash(alert.room_id)}</span>
+        <span>{displayedAt ? formatDate(displayedAt) : "No recent time"}</span>
+      </div>
+
+      <div className="alert-card-foot">
+        <span>{friendlyConfidence(alert.confidence)}</span>
+        <span>Click to see details</span>
+      </div>
     </button>
   );
 }
@@ -168,7 +197,31 @@ function WardenAlertCard({ alert, onOpen }) {
 function KpiCardButton({ children, onClick, title }) {
   return <button type="button" className="warden-kpi-button" onClick={onClick} title={title}>{children}</button>;
 }
+function friendlyAlertTitle(alert = {}) {
+  const reason = String(alert.reason || alert.message || "").toLowerCase();
 
+  if (reason.includes("noise")) return "Noise problem detected";
+  if (reason.includes("door")) return "Door needs attention";
+  if (reason.includes("inspection")) return "Room needs checking";
+  if (reason.includes("current") || reason.includes("energy") || reason.includes("power")) {
+    return "Unusual power use";
+  }
+
+  return "Critical Alerts";
+}
+
+function friendlyAlertReason(alert = {}) {
+  return alert.reason || alert.message || "Please check this room.";
+}
+
+function friendlyConfidence(value) {
+  if (value === undefined || value === null) return "System detected";
+  const percent = Math.round(Number(value || 0) * 100);
+
+  if (percent >= 80) return "High confidence";
+  if (percent >= 50) return "Medium confidence";
+  return "Low confidence";
+}
 const renderForecastLegend = ({ payload = [] }) => (
   <div className="owner-legend-row">
     {payload.map((entry) => {
@@ -200,7 +253,25 @@ function getLastNDates(days = 7, endDateString) {
   }
   return dates;
 }
+function friendlySeverity(value = "") {
+  const s = String(value).toLowerCase();
+  if (s.includes("critical")) return "Urgent ⚠️";
+  if (s.includes("warning")) return "Needs attention";
+  return "Check";
+}
 
+function friendlyModel() {
+  return "System detected issue";
+}
+
+function friendlyConfidenceText(value) {
+  if (value === undefined || value === null) return "System detected this issue";
+  const percent = Math.round(Number(value || 0) * 100);
+
+  if (percent >= 80) return "High certainty";
+  if (percent >= 50) return "Moderate certainty";
+  return "Low certainty";
+}
 function fillSevenDays(history = [], selectedRoom = "All") {
   const rows = Array.isArray(history) ? history : [];
   const byDate = new Map(rows.map((item) => [item.date, item]));
@@ -209,9 +280,16 @@ function fillSevenDays(history = [], selectedRoom = "All") {
     const found = byDate.get(date);
     const occupied = Number(found?.occupied_count || 0);
     const empty = Number(found?.empty_count || 0);
-    const warning = Number(found?.warning_count || 0);
-    const violation = Number(found?.violation_count || 0);
-    const criticalNoiseCount = warning + violation;
+    const warning =
+  Number(found?.warning_count || 0) +
+  Number(found?.avg_warnings || 0) +
+  Number(found?.complaint_count || 0);
+
+const violation =
+  Number(found?.violation_count || 0) +
+  Number(found?.critical_count || 0);
+
+const criticalNoiseCount = warning + violation;
     const totalBase = selectedRoom === "All" ? occupied + empty : Math.max(occupied + empty, 1);
     return {
       date,
@@ -224,11 +302,87 @@ function fillSevenDays(history = [], selectedRoom = "All") {
       avg_current: Number(found?.avg_current || 0),
       inspection_count: Number(found?.inspection_count || 0),
       critical_noise_count: criticalNoiseCount,
-      normal_noise_count: Math.max(totalBase - criticalNoiseCount, 0)
+      normal_noise_count:
+  criticalNoiseCount > 0
+    ? Math.max(totalBase - criticalNoiseCount, 0)
+    : totalBase
     };
   });
 }
+function friendlyOccupancy(status = "") {
+  const s = String(status).toLowerCase();
+  if (s.includes("occupied")) return "Occupied";
+  if (s.includes("empty")) return "Empty room";
+  if (s.includes("sleeping")) return "Resident resting";
+  return "No data";
+}
+function friendlyDayType(type = "") {
+  return type === "Weekend" ? "Weekend (busy time)" : "Weekday (normal)";
+}
 
+function friendlyPattern(pattern = "") {
+  const p = String(pattern).toLowerCase();
+
+  if (p.includes("no data")) return "No data available";
+  if (p.includes("high")) return "Usually busy";
+  if (p.includes("low")) return "Usually calm";
+  if (p.includes("moderate")) return "Moderate activity";
+
+  return pattern || "Normal activity";
+}
+
+function friendlyNoiseLevel(value = 0) {
+  const v = Number(value || 0);
+
+  if (v >= 80) return "Very loud";
+  if (v >= 60) return "Noisy";
+  if (v >= 40) return "Normal";
+  return "Quiet";
+}
+
+function friendlyRisk(value = 0) {
+  const v = Number(value || 0);
+
+  if (v >= 50) return "High risk ⚠️";
+  if (v >= 20) return "Moderate risk";
+  return "Low risk";
+}
+function friendlyNoise(status = "") {
+  const s = String(status).toLowerCase();
+  if (s.includes("violation")) return "Very loud ⚠️";
+  if (s.includes("warning")) return "A bit noisy";
+  if (s.includes("complaint")) return "Noise complaint";
+  if (s.includes("normal")) return "Quiet";
+  return "No data";
+}
+
+function friendlyDoor(status = "") {
+  const s = String(status).toLowerCase();
+  if (s.includes("open")) return "Door open";
+  if (s.includes("closed")) return "Door closed";
+  return "Unknown";
+}
+function friendlyYesNo(value) {
+  return value ? "Yes" : "No";
+}
+
+function friendlyInspection(value) {
+  return value ? "Needs checking ⚠️" : "All good";
+}
+
+function friendlyReason(reasons = []) {
+  if (!reasons || !reasons.length) return "No issues detected";
+  return reasons.join(", ");
+}
+
+function friendlyNoiseSentence(status = "", db = 0) {
+  const s = String(status).toLowerCase();
+
+  if (s.includes("violation")) return `Very loud (${db} dB)`;
+  if (s.includes("warning")) return `Slightly noisy (${db} dB)`;
+  if (s.includes("complaint")) return `Noise complaint (${db} dB)`;
+  return `Quiet (${db} dB)`;
+}
 export default function WardenDashboard() {
   const { registerChatContext, clearChatContext } = useChatbotContext();
   const registerChatContextRef = useRef(registerChatContext);
@@ -572,10 +726,10 @@ export default function WardenDashboard() {
 
 
       <div className="stats-grid">
-        <KpiCardButton onClick={() => setSelectedKpi("occupied")} title="Click to drill down occupied rooms"><StatCard title="Occupied Rooms" value={displayedOccupied} subtitle="From summary API" icon={<HiOutlineHomeModern />} tone="blue" /></KpiCardButton>
-        <KpiCardButton onClick={() => setSelectedKpi("empty")} title="Click to drill down empty rooms"><StatCard title="Empty Rooms" value={displayedEmpty} subtitle="Useful for cleaning allocation" icon={<HiOutlineHomeModern />} tone="green" /></KpiCardButton>
-        <KpiCardButton onClick={() => setSelectedKpi("alerts")} title="Click to drill down critical alerts"><StatCard title="Critical Alerts" value={displayedAlerts} subtitle="From ML anomaly detection" icon={<HiOutlineSpeakerWave />} tone="orange" /></KpiCardButton>
-        <KpiCardButton onClick={() => setSelectedKpi("priority")} title="Click to drill down cleaning priority"><StatCard title="Cleaning Priority" value={displayedPriority} subtitle="Rooms that need action" icon={<HiOutlineWrenchScrewdriver />} tone="red" /></KpiCardButton>
+        <KpiCardButton onClick={() => setSelectedKpi("occupied")} title="Click to drill down occupied rooms"><StatCard title="Occupied Rooms" value={displayedOccupied} subtitle="Rooms currently in use" icon={<HiOutlineHomeModern />} tone="blue" /></KpiCardButton>
+        <KpiCardButton onClick={() => setSelectedKpi("empty")} title="Click to drill down empty rooms"><StatCard title="Empty Rooms" value={displayedEmpty} subtitle="Rooms available for cleaning" icon={<HiOutlineHomeModern />} tone="green" /></KpiCardButton>
+        <KpiCardButton onClick={() => setSelectedKpi("alerts")} title="Click to drill down critical alerts"><StatCard title="Critical Alerts" value={displayedAlerts} subtitle="Needs immediate attention" icon={<HiOutlineSpeakerWave />} tone="orange" /></KpiCardButton>
+        <KpiCardButton onClick={() => setSelectedKpi("priority")} title="Click to drill down cleaning priority"><StatCard title="Cleaning Priority" value={displayedPriority} subtitle="Rooms to check first" icon={<HiOutlineWrenchScrewdriver />} tone="red" /></KpiCardButton>
       </div>
 
       <div className="owner-top-grid">
@@ -601,7 +755,7 @@ export default function WardenDashboard() {
           <div className="warden-live-history-head security-style-history-head">
             <div>
               <strong>Recent Live History</strong>
-              <p>Latest warden activity for real-time monitoring, matching the Security recent activity style.</p>
+              <p>Latest warden activity for real-time monitoring.</p>
             </div>
             <span><span className="live-dot" /> Live · every 8s · {lastRefreshAt.toLocaleTimeString()}</span>
           </div>
@@ -643,39 +797,178 @@ export default function WardenDashboard() {
           {forecastChartData.length ? <div className="chart-shell owner-forecast-chart-shell"><ResponsiveContainer width="100%" height={360}><LineChart data={forecastChartData} margin={{ top: 10, right: 24, left: 6, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" /><XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} minTickGap={24} /><YAxis tick={{ fill: "#64748b", fontSize: 11 }} allowDecimals={false} /><Tooltip contentStyle={chartTooltipStyle} /><Legend content={renderForecastLegend} /><Line type="monotone" dataKey="actual_occupancy" name="Actual Occupancy" stroke="#2563eb" strokeWidth={2.4} dot={false} connectNulls /><Line type="monotone" dataKey="actual_warnings" name="Actual Warnings" stroke="#f59e0b" strokeWidth={2.2} dot={false} connectNulls /><Line type="monotone" dataKey="predicted_occupancy" name="Predicted Occupancy" stroke="#2563eb" strokeWidth={2.4} strokeDasharray="7 5" dot={false} connectNulls /><Line type="monotone" dataKey="predicted_warnings" name="Predicted Warnings" stroke="#f59e0b" strokeWidth={2.2} strokeDasharray="7 5" dot={false} connectNulls /></LineChart></ResponsiveContainer></div> : <EmptyState text="No forecast or history data available for this room." />}
         </SectionCard>
 
-        <SectionCard title="Weekly Pattern Discovery">
-          <DataTable columns={[{ key: "day", label: "Day" }, { key: "day_type", label: "Type" }, { key: "usual_pattern", label: "Usual Pattern", render: (row) => <HistoryWord value={row.usual_pattern} /> }, { key: "avg_occupancy", label: "Avg Occupancy", render: (row) => formatNumber(row.avg_occupancy) }, { key: "avg_noise_level", label: "Avg Noise Level", render: (row) => formatNumber(row.avg_noise_level) }, { key: "avg_warnings", label: "Avg Warnings", render: (row) => formatNumber(row.avg_warnings) }, { key: "avg_critical_ratio", label: "Avg Critical Ratio", render: (row) => `${formatNumber(row.avg_critical_ratio)}%` }, { key: "cluster_id", label: "Cluster" }]} rows={patternRows} />
-        </SectionCard>
+       <SectionCard title="Weekly Pattern Discovery">
+  <DataTable
+    columns={[
+      {
+        key: "day",
+        label: "Day"
+      },
+      {
+        key: "day_type",
+        label: "Type",
+        render: (row) => row.day_type || "-"
+      },
+      {
+        key: "usual_pattern",
+        label: "Usual Pattern",
+        render: (row) => <HistoryWord value={row.usual_pattern} />
+      },
+      {
+        key: "avg_occupancy",
+        label: "Average Occupancy",
+        render: (row) => formatNumber(row.avg_occupancy)
+      },
+      {
+        key: "avg_noise_level",
+        label: "Average Noise",
+        render: (row) => `${formatNumber(row.avg_noise_level)} dB`
+      },
+      {
+        key: "avg_warnings",
+        label: "Average Warnings",
+        render: (row) => formatNumber(row.avg_warnings)
+      },
+      {
+        key: "avg_critical_ratio",
+        label: "Attention Level",
+        render: (row) => {
+          const value = Number(row.avg_critical_ratio || 0);
 
-        <SectionCard title="Abnormal / Anomaly Records">
-          {wardenAnomalies.length ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "date", label: "Date" }, { key: "status", label: "Status", render: (row) => <HistoryWord value={row.status || "Abnormal"} /> }, { key: "anomaly_score", label: "Score", render: (row) => formatNumber(row.anomaly_score, 3) }, { key: "reason", label: "Reason" }]} rows={wardenAnomalies.slice(0, 12)} /> : <EmptyState text="No anomaly records available for this room." />}
-        </SectionCard>
+          if (value >= 20) return "High attention needed";
+          if (value >= 10) return "Moderate attention";
+          return "Low attention";
+        }
+      }
+    ]}
+    rows={patternRows}
+  />
+</SectionCard>
+
+        <SectionCard title="Abnormal / Anomaly Detection">
+  {wardenAnomalies.length ? (
+    <DataTable
+      columns={[
+        {
+          key: "room_id",
+          label: "Room"
+        },
+        {
+          key: "date",
+          label: "Date"
+        },
+        {
+          key: "status",
+          label: "Situation",
+          render: (row) => <HistoryWord value={row.status || "Needs Attention"} />
+        },
+        {
+          key: "anomaly_score",
+          label: "Attention Level",
+          render: (row) => {
+            const score = Math.abs(Number(row.anomaly_score || 0));
+
+            if (score >= 0.7) return "High attention needed";
+            if (score >= 0.4) return "Moderate attention";
+            return "Low attention";
+          }
+        },
+        {
+  key: "reason",
+  label: "Reason",
+  render: (row) => {
+    const noise = Number(row.avg_sound_peak || 0);
+    const current = Number(row.avg_current || 0);
+
+    if (noise >= 100 && current > 1) {
+      return "Very loud noise + high power use";
+    }
+
+    if (noise >= 80) {
+      return "Very loud noise";
+    }
+
+    if (noise >= 60) {
+      return "High noise";
+    }
+
+    if (current > 1) {
+      return "High power use";
+    }
+
+    return "Unusual room activity";
+  }
+}
+      ]}
+      rows={wardenAnomalies.slice(0, 12)}
+    />
+  ) : (
+    <EmptyState text="No unusual room activity found." />
+  )}
+</SectionCard>
 
         <div className="owner-top-grid">
-          <SectionCard title="Inspection Evidence and Report Support">
-            {filteredRooms.length ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "captured_at", label: "Last Evidence", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }, { key: "sound_peak", label: "Noise Evidence", render: (row) => `${formatNumber(row.sound_peak)} dB` }, { key: "motion_count", label: "Motion" }, { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> }, { key: "inspection_reasons", label: "Warden Reason", render: (row) => renderReasons(row.inspection_reasons) }, { key: "sensor_faults", label: "Sensor Fault Evidence", render: (row) => renderFaults(row.sensor_faults) }]} rows={filteredRooms.slice(0, 12)} /> : <EmptyState text="No evidence rows available for this room." />}
+          <SectionCard title="Inspection Evidence and Report Support" fullWidth>
+            {filteredRooms.length ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "captured_at", label: "Last Evidence", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }, { key: "sound_peak", label: "Noise Evidence", render: (row) => `${formatNumber(row.sound_peak)} dB` }, { key: "motion_count", label: "Motion" }, { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> }, { key: "inspection_reasons", label: "Warden Reason", render: (row) => renderReasons(row.inspection_reasons) }]} rows={filteredRooms.slice(0, 12)} /> : <EmptyState text="No evidence rows available for this room." />}
           </SectionCard>
-          <SectionCard title="ML Feature Importance">
-            {wardenFeatureImportance.length ? <div className="chart-shell"><ResponsiveContainer width="100%" height={320}><BarChart data={wardenFeatureImportance.slice(0, 8)} layout="vertical" margin={{ top: 8, right: 24, left: 80, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" /><XAxis type="number" tick={{ fill: "#64748b", fontSize: 12 }} /><YAxis type="category" dataKey="feature" tick={{ fill: "#64748b", fontSize: 12 }} width={90} /><Tooltip contentStyle={chartTooltipStyle} /><Bar dataKey="importance" name="Model Importance" fill="#7c3aed" radius={[0, 8, 8, 0]} /></BarChart></ResponsiveContainer></div> : <EmptyState text="No feature-importance records available. Run npm run ml:warden." />}
-          </SectionCard>
+          
         </div>
 
       </> : null}
 
-      <SectionCard title="Data Range / Data Validity">
-        <div className="stats-grid">
-          <StatCard title="Total Records" value={wardenDataRange?.total_records ?? 0} subtitle="MongoDB records used by Warden" icon={<HiOutlineChartBar />} tone="purple" />
-          <StatCard title="Days Covered" value={wardenDataRange?.total_days_covered ?? 0} subtitle={wardenDataRange?.is_valid_5_to_7_days_or_more || wardenDataRange?.valid ? "Valid 5+ days" : "Needs 5+ days"} icon={<HiOutlineHomeModern />} tone="green" />
-          <StatCard title="First Timestamp" value={wardenDataRange?.first_timestamp ? formatDate(wardenDataRange.first_timestamp) : "No Data"} subtitle="Earliest reading" icon={<HiOutlineBellAlert />} tone="blue" />
-          <StatCard title="Last Timestamp" value={wardenDataRange?.last_timestamp ? formatDate(wardenDataRange.last_timestamp) : "No Data"} subtitle="Latest reading" icon={<HiOutlineWrenchScrewdriver />} tone="orange" />
-        </div>
-      </SectionCard>
+     
 
       {selectedKpi ? <div className="warden-modal-overlay" onClick={() => setSelectedKpi(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedKpi === "occupied" && "Occupied Rooms"}{selectedKpi === "empty" && "Empty Rooms"}{selectedKpi === "alerts" && "Critical Alerts"}{selectedKpi === "priority" && "Cleaning Priority"}</h3><button onClick={() => setSelectedKpi(null)}>Close</button></div>{selectedKpi === "occupied" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "noise_stat", label: "Noise", render: (row) => <HistoryWord value={row.noise_stat} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={occupiedRows} /> : null}{selectedKpi === "empty" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={emptyRows.length ? emptyRows : [selectedRoomData].filter(Boolean)} /> : null}{selectedKpi === "alerts" ? roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-modal-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." /> : null}{selectedKpi === "priority" ? cleaningPriorityRooms.length > 0 ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "priority_type", label: "Priority Type", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" ? "Empty Room Cleaning" : "Inspection Required" }, { key: "inspection_reasons", label: "Reason", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" && !(row.inspection_reasons || []).length ? "Room is empty and ready for cleaning" : renderReasons(row.inspection_reasons) }]} rows={cleaningPriorityRooms} /> : <EmptyState text="No cleaning priority rooms." /> : null}</div></div> : null}
 
-      {selectedRoomModal ? <div className="warden-modal-overlay" onClick={() => setSelectedRoomModal(null)}><div className="warden-modal warden-room-detail-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedRoomModal.room_id} Room Drill-down</h3><button onClick={() => setSelectedRoomModal(null)}>Close</button></div><div className="warden-room-detail-grid"><div className="warden-single-room-card"><h4>Current Status</h4><p><strong>Occupancy:</strong> {selectedRoomModal.occupancy_stat}</p><p><strong>Noise:</strong> {selectedRoomModal.noise_stat} · {formatNumber(selectedRoomModal.sound_peak)} dB</p><p><strong>Door:</strong> {selectedRoomModal.door_status}</p><p><strong>Current:</strong> {formatNumber(selectedRoomModal.current_amp, 3)} A</p><p><strong>Last Activity:</strong> {selectedRoomModal.captured_at ? formatDate(selectedRoomModal.captured_at) : "No Data"}</p></div><div className="warden-single-room-card"><h4>Inspection Evidence</h4><p><strong>Needs Inspection:</strong> {selectedRoomModal.needs_inspection ? "Yes" : "No"}</p><p><strong>Reasons:</strong> {renderReasons(selectedRoomModal.inspection_reasons)}</p><p><strong>Motion Count:</strong> {valueOrDash(selectedRoomModal.motion_count)}</p><p><strong>Sensor Faults:</strong> {renderFaults(selectedRoomModal.sensor_faults)}</p></div></div></div></div> : null}
+      {selectedRoomModal ? <div className="warden-modal-overlay" onClick={() => setSelectedRoomModal(null)}><div className="warden-modal warden-room-detail-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedRoomModal.room_id} Room Drill-down</h3><button onClick={() => setSelectedRoomModal(null)}>Close</button></div><div className="warden-room-detail-grid"><div className="warden-single-room-card"><h4>Room Situation</h4>
 
-      {selectedAlert ? <div className="warden-modal-overlay" onClick={() => setSelectedAlert(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>Critical Alert</h3><button onClick={() => setSelectedAlert(null)}>Close</button></div><div className="warden-single-room-grid"><div className="warden-single-room-card"><h4>Critical Alert Details</h4><p><strong>Room:</strong> {selectedAlert.room_id}</p><p><strong>Severity:</strong> {selectedAlert.severity}</p><p><strong>Model:</strong> {selectedAlert.model_name || "IsolationForest"}</p><p><strong>Confidence:</strong> {Math.round(Number(selectedAlert.confidence || 0) * 100)}%</p><p><strong>Reason:</strong> {selectedAlert.message || selectedAlert.reason}</p><p><strong>Displayed At:</strong> {(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) ? formatDate(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) : "No Data"}</p><p><strong>ML Evidence Time:</strong> {selectedAlert.captured_at ? formatDate(selectedAlert.captured_at) : "No Data"}</p></div></div></div></div> : null}
+<p><strong>Occupancy:</strong> {friendlyOccupancy(selectedRoomModal.occupancy_stat)}</p>
+
+<p><strong>Noise Level:</strong> {friendlyNoiseSentence(
+  selectedRoomModal.noise_stat,
+  formatNumber(selectedRoomModal.sound_peak)
+)}</p>
+
+<p><strong>Door Status:</strong> {friendlyDoor(selectedRoomModal.door_status)}</p>
+
+<p><strong>Electric Usage:</strong> {formatNumber(selectedRoomModal.current_amp, 2)} A</p>
+
+<p><strong>Last Checked:</strong> {selectedRoomModal.captured_at ? formatDate(selectedRoomModal.captured_at) : "No recent data"}</p></div><div className="warden-single-room-card"><h4>Action Needed</h4>
+
+<p><strong>Check Required:</strong> {friendlyInspection(selectedRoomModal.needs_inspection)}</p>
+
+<p><strong>Reason:</strong> {friendlyReason(selectedRoomModal.inspection_reasons)}</p>
+
+<p><strong>Movement Detected:</strong> {valueOrDash(selectedRoomModal.motion_count)} times</p>
+
+</div></div></div></div> : null}
+
+      {selectedAlert ? <div className="warden-modal-overlay" onClick={() => setSelectedAlert(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>Critical Alert</h3><button onClick={() => setSelectedAlert(null)}>Close</button></div><div className="warden-single-room-grid"><div className="warden-single-room-card"><h4>Critical Alert Information</h4>
+
+<p><strong>Room:</strong> {selectedAlert.room_id}</p>
+
+<p><strong>Urgency:</strong> {friendlySeverity(selectedAlert.severity)}</p>
+
+<p><strong>Issue:</strong> {friendlyAlertReason(selectedAlert)}</p>
+
+<p><strong>System Note:</strong> {friendlyModel()}</p>
+
+
+<p><strong>Time Detected:</strong>
+  {(selectedAlert.display_at ||
+    selectedAlert.generated_at ||
+    selectedAlert.updatedAt ||
+    selectedAlert.createdAt ||
+    selectedAlert.captured_at)
+      ? formatDate(
+          selectedAlert.display_at ||
+          selectedAlert.generated_at ||
+          selectedAlert.updatedAt ||
+          selectedAlert.createdAt ||
+          selectedAlert.captured_at
+        )
+      : "No recent time"}
+</p></div></div></div></div> : null}
     </div>
   );
 }

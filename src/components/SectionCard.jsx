@@ -1,11 +1,9 @@
-export default function SectionCard({ title, children, action }) {
-    return (
-      <section className="section-card">
-        <div className="section-head">
-          <h2>{title}</h2>
-          {action}
-        </div>
-        {children}
-      </section>
-    );
-  }
+
+export default function SectionCard({ title, children, fullWidth }) {
+  return (
+    <div className={`section-card ${fullWidth ? "full-width" : ""}`}>
+      <h3>{title}</h3>
+      {children}
+    </div>
+  );
+}
