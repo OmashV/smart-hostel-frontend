@@ -329,16 +329,25 @@ export default function WardenDashboard() {
     try {
       setError("");
       const roomId = selectedRoomFilterRef.current;
+      const safe = async (request, fallback) => {
+        try {
+          return await request();
+        } catch (requestError) {
+          console.error("Warden dashboard API failed:", requestError?.response?.config?.url || requestError?.message);
+          return fallback;
+        }
+      };
+
       const [summaryRes, roomsRes, alertsRes, forecastRes, anomalyRes, patternRes, featureImportanceRes, historyRes, dataRangeRes] = await Promise.all([
-        getWardenSummary(roomId),
-        getWardenRoomsStatus(roomId),
-        getWardenMlAlerts(roomId),
-        getWardenForecasts(roomId),
-        getWardenAnomalies(roomId),
-        getWardenPatterns(roomId),
-        getWardenFeatureImportance(),
-        getWardenHistory(roomId),
-        getWardenDataRange(roomId)
+        safe(() => getWardenSummary(roomId), null),
+        safe(() => getWardenRoomsStatus(roomId), { rooms: [] }),
+        safe(() => getWardenMlAlerts(roomId), { items: [] }),
+        safe(() => getWardenForecasts(roomId), { items: [] }),
+        safe(() => getWardenAnomalies(roomId), { items: [] }),
+        safe(() => getWardenPatterns(roomId), { items: [] }),
+        safe(() => getWardenFeatureImportance(), { items: [] }),
+        safe(() => getWardenHistory(roomId), { items: [] }),
+        safe(() => getWardenDataRange(roomId), null)
       ]);
       setSummary(summaryRes || null);
       setRooms(roomsRes?.rooms || []);
