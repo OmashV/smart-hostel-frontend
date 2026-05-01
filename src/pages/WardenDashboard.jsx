@@ -29,15 +29,16 @@ import {
   getWardenPatterns,
   getWardenForecasts,
   getWardenHistory,
-  getWardenMlAlerts
+  getWardenMlAlerts,
+  getWardenDataRange
 } from "../api/client";
-import ChatAssistant from "../components/ChatAssistant";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import StatusBadge from "../components/StatusBadge";
 import DataTable from "../components/DataTable";
 import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
+import { useChatbotContext } from "../context/ChatbotContext";
 import { formatDate } from "../utils/format";
 
 const ORDERED_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -228,6 +229,10 @@ function fillSevenDays(history = [], selectedRoom = "All") {
 }
 
 export default function WardenDashboard() {
+  const { registerChatContext, clearChatContext } = useChatbotContext();
+  const registerChatContextRef = useRef(registerChatContext);
+  const clearChatContextRef = useRef(clearChatContext);
+  const handleChatActionsRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState(null);
   const [rooms, setRooms] = useState([]);
@@ -246,11 +251,53 @@ export default function WardenDashboard() {
   const [wardenPatterns, setWardenPatterns] = useState([]);
   const [wardenFeatureImportance, setWardenFeatureImportance] = useState([]);
   const [wardenHistory, setWardenHistory] = useState([]);
+  const [wardenDataRange, setWardenDataRange] = useState(null);
   const [lastRefreshAt, setLastRefreshAt] = useState(new Date());
   const [liveHistoryLog, setLiveHistoryLog] = useState([]);
   const selectedRoomFilterRef = useRef(selectedRoomFilter);
 
   useEffect(() => { selectedRoomFilterRef.current = selectedRoomFilter; }, [selectedRoomFilter]);
+
+  useEffect(() => {
+    registerChatContextRef.current = registerChatContext;
+    clearChatContextRef.current = clearChatContext;
+  }, [registerChatContext, clearChatContext]);
+
+  useEffect(() => {
+    handleChatActionsRef.current = (actions) => {
+      actions.forEach((action) => {
+        if (action.type === "switch_floor") {
+          setSelectedFloor(action.value === "all" ? "All" : action.value);
+          setSelectedRoomFilter("All");
+        }
+
+        if (action.type === "switch_room") {
+          setSelectedRoomFilter(action.value === "all" ? "All" : action.value);
+        }
+      });
+    };
+
+    registerChatContextRef.current({
+      role: "warden",
+      dashboardState: {
+        dashboard: "warden",
+        floorId: selectedFloor,
+        roomId: selectedRoomFilter,
+        selectedFilters: {
+          floorId: selectedFloor,
+          roomId: selectedRoomFilter,
+          onlyAttention
+        },
+        selectedVisual: null,
+        dataRange: wardenDataRange
+      },
+      onAction: handleChatActionsRef.current
+    });
+
+    return () => {
+      clearChatContextRef.current();
+    };
+  }, [onlyAttention, selectedFloor, selectedRoomFilter, wardenDataRange]);
 
   useEffect(() => {
     async function loadFilterOptions() {
@@ -282,7 +329,7 @@ export default function WardenDashboard() {
     try {
       setError("");
       const roomId = selectedRoomFilterRef.current;
-      const [summaryRes, roomsRes, alertsRes, forecastRes, anomalyRes, patternRes, featureImportanceRes, historyRes] = await Promise.all([
+      const [summaryRes, roomsRes, alertsRes, forecastRes, anomalyRes, patternRes, featureImportanceRes, historyRes, dataRangeRes] = await Promise.all([
         getWardenSummary(roomId),
         getWardenRoomsStatus(roomId),
         getWardenMlAlerts(roomId),
@@ -290,7 +337,8 @@ export default function WardenDashboard() {
         getWardenAnomalies(roomId),
         getWardenPatterns(roomId),
         getWardenFeatureImportance(),
-        getWardenHistory(roomId)
+        getWardenHistory(roomId),
+        getWardenDataRange(roomId)
       ]);
       setSummary(summaryRes || null);
       setRooms(roomsRes?.rooms || []);
@@ -300,6 +348,7 @@ export default function WardenDashboard() {
       setWardenPatterns(patternRes?.items || []);
       setWardenFeatureImportance(featureImportanceRes?.items || []);
       setWardenHistory(historyRes?.items || historyRes?.history || []);
+      setWardenDataRange(dataRangeRes || null);
       const refreshTime = new Date();
 setLastRefreshAt(refreshTime);
 
@@ -603,13 +652,20 @@ setLiveHistoryLog((previous) => {
 
       </> : null}
 
+      <SectionCard title="Data Range / Data Validity">
+        <div className="stats-grid">
+          <StatCard title="Total Records" value={wardenDataRange?.total_records ?? 0} subtitle="MongoDB records used by Warden" icon={<HiOutlineChartBar />} tone="purple" />
+          <StatCard title="Days Covered" value={wardenDataRange?.total_days_covered ?? 0} subtitle={wardenDataRange?.is_valid_5_to_7_days_or_more || wardenDataRange?.valid ? "Valid 5+ days" : "Needs 5+ days"} icon={<HiOutlineHomeModern />} tone="green" />
+          <StatCard title="First Timestamp" value={wardenDataRange?.first_timestamp ? formatDate(wardenDataRange.first_timestamp) : "No Data"} subtitle="Earliest reading" icon={<HiOutlineBellAlert />} tone="blue" />
+          <StatCard title="Last Timestamp" value={wardenDataRange?.last_timestamp ? formatDate(wardenDataRange.last_timestamp) : "No Data"} subtitle="Latest reading" icon={<HiOutlineWrenchScrewdriver />} tone="orange" />
+        </div>
+      </SectionCard>
+
       {selectedKpi ? <div className="warden-modal-overlay" onClick={() => setSelectedKpi(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedKpi === "occupied" && "Occupied Rooms"}{selectedKpi === "empty" && "Empty Rooms"}{selectedKpi === "alerts" && "Critical Alerts"}{selectedKpi === "priority" && "Cleaning Priority"}</h3><button onClick={() => setSelectedKpi(null)}>Close</button></div>{selectedKpi === "occupied" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "noise_stat", label: "Noise", render: (row) => <HistoryWord value={row.noise_stat} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={occupiedRows} /> : null}{selectedKpi === "empty" ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "door_status", label: "Door", render: (row) => <StatusBadge value={row.door_status} /> }, { key: "captured_at", label: "Evidence Time", render: (row) => (row.captured_at ? formatDate(row.captured_at) : "No Data") }]} rows={emptyRows.length ? emptyRows : [selectedRoomData].filter(Boolean)} /> : null}{selectedKpi === "alerts" ? roomSpecificAlerts.length ? <div className="alerts-list">{roomSpecificAlerts.map((alert, index) => <WardenAlertCard key={`${alert.room_id}-${alert.captured_at}-modal-${index}`} alert={alert} onOpen={setSelectedAlert} />)}</div> : <EmptyState text="No critical alerts right now." /> : null}{selectedKpi === "priority" ? cleaningPriorityRooms.length > 0 ? <DataTable columns={[{ key: "room_id", label: "Room" }, { key: "occupancy_stat", label: "Occupancy", render: (row) => <StatusBadge value={row.occupancy_stat} /> }, { key: "priority_type", label: "Priority Type", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" ? "Empty Room Cleaning" : "Inspection Required" }, { key: "inspection_reasons", label: "Reason", render: (row) => String(row.occupancy_stat || "").toLowerCase() === "empty" && !(row.inspection_reasons || []).length ? "Room is empty and ready for cleaning" : renderReasons(row.inspection_reasons) }]} rows={cleaningPriorityRooms} /> : <EmptyState text="No cleaning priority rooms." /> : null}</div></div> : null}
 
       {selectedRoomModal ? <div className="warden-modal-overlay" onClick={() => setSelectedRoomModal(null)}><div className="warden-modal warden-room-detail-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>{selectedRoomModal.room_id} Room Drill-down</h3><button onClick={() => setSelectedRoomModal(null)}>Close</button></div><div className="warden-room-detail-grid"><div className="warden-single-room-card"><h4>Current Status</h4><p><strong>Occupancy:</strong> {selectedRoomModal.occupancy_stat}</p><p><strong>Noise:</strong> {selectedRoomModal.noise_stat} · {formatNumber(selectedRoomModal.sound_peak)} dB</p><p><strong>Door:</strong> {selectedRoomModal.door_status}</p><p><strong>Current:</strong> {formatNumber(selectedRoomModal.current_amp, 3)} A</p><p><strong>Last Activity:</strong> {selectedRoomModal.captured_at ? formatDate(selectedRoomModal.captured_at) : "No Data"}</p></div><div className="warden-single-room-card"><h4>Inspection Evidence</h4><p><strong>Needs Inspection:</strong> {selectedRoomModal.needs_inspection ? "Yes" : "No"}</p><p><strong>Reasons:</strong> {renderReasons(selectedRoomModal.inspection_reasons)}</p><p><strong>Motion Count:</strong> {valueOrDash(selectedRoomModal.motion_count)}</p><p><strong>Sensor Faults:</strong> {renderFaults(selectedRoomModal.sensor_faults)}</p></div></div></div></div> : null}
 
       {selectedAlert ? <div className="warden-modal-overlay" onClick={() => setSelectedAlert(null)}><div className="warden-modal" onClick={(e) => e.stopPropagation()}><div className="warden-modal-head"><h3>Critical Alert</h3><button onClick={() => setSelectedAlert(null)}>Close</button></div><div className="warden-single-room-grid"><div className="warden-single-room-card"><h4>Critical Alert Details</h4><p><strong>Room:</strong> {selectedAlert.room_id}</p><p><strong>Severity:</strong> {selectedAlert.severity}</p><p><strong>Model:</strong> {selectedAlert.model_name || "IsolationForest"}</p><p><strong>Confidence:</strong> {Math.round(Number(selectedAlert.confidence || 0) * 100)}%</p><p><strong>Reason:</strong> {selectedAlert.message || selectedAlert.reason}</p><p><strong>Displayed At:</strong> {(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) ? formatDate(selectedAlert.display_at || selectedAlert.generated_at || selectedAlert.updatedAt || selectedAlert.createdAt || selectedAlert.captured_at) : "No Data"}</p><p><strong>ML Evidence Time:</strong> {selectedAlert.captured_at ? formatDate(selectedAlert.captured_at) : "No Data"}</p></div></div></div></div> : null}
-
-      <ChatAssistant roomId={selectedRoomFilter} />
     </div>
   );
 }
