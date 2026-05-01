@@ -5,7 +5,8 @@ import {
   HiOutlineHomeModern,
   HiOutlineSpeakerWave,
   HiOutlineWrenchScrewdriver,
-  HiOutlineEye
+  HiOutlineEye,
+  HiOutlineChartBar   // ✅ THIS IS REQUIRED
 } from "react-icons/hi2";
 import {
   Bar,
@@ -359,24 +360,24 @@ export default function WardenDashboard() {
       setWardenHistory(historyRes?.items || historyRes?.history || []);
       setWardenDataRange(dataRangeRes || null);
       const refreshTime = new Date();
-setLastRefreshAt(refreshTime);
+      setLastRefreshAt(refreshTime);
 
-const snapshotRows = (roomsRes?.rooms || []).map((room) => ({
-  id: `${room.room_id}-${refreshTime.toISOString()}`,
-  room_id: room.room_id,
-  date: refreshTime.toLocaleDateString(),
-  time: refreshTime.toLocaleTimeString(),
-  occupied_count: room.occupancy_stat || "-",
-  warning_count: room.noise_stat || "-",
-  violation_count: room.needs_inspection ? "Needs Inspection" : "Stable",
-  avg_sound_peak: Number(room.sound_peak || 0),
-  source: "Live 8-second snapshot"
-}));
+      const realHistoryRows = (historyRes?.room_level_items || [])
+        .slice()
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+        .map((item, index) => ({
+          id: `${item.room_id || "room"}-${item.date || "date"}-${index}`,
+          room_id: item.room_id || "-",
+          date: item.date || "-",
+          time: item.hour !== undefined && item.hour !== null ? `${String(item.hour).padStart(2, "0")}:00` : "-",
+          occupied_count: Number(item.occupied_count || 0),
+          warning_count: Number(item.warning_count || 0),
+          violation_count: Number(item.violation_count || 0),
+          avg_sound_peak: Number(item.avg_sound_peak || 0),
+          source: item.source || "MongoDB history"
+        }));
 
-setLiveHistoryLog((previous) => {
-  const combined = [...snapshotRows, ...previous];
-  return combined.slice(0, 120);
-});
+      setLiveHistoryLog(realHistoryRows.slice(0, 120));
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load warden dashboard data.");
     } finally {
