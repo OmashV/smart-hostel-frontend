@@ -272,25 +272,37 @@ function friendlyConfidenceText(value) {
   if (percent >= 50) return "Moderate certainty";
   return "Low certainty";
 }
-function fillSevenDays(history = [], selectedRoom = "All") {
+function fillSevenDays(history = [], selectedRoom = "All", selectedRoomData = null) {
   const rows = Array.isArray(history) ? history : [];
   const byDate = new Map(rows.map((item) => [item.date, item]));
   const latestDate = rows.map((item) => item.date).filter(Boolean).sort().pop();
+
+  const latestOccupied =
+    String(selectedRoomData?.occupancy_stat || "").toLowerCase() === "occupied";
+
   return getLastNDates(7, latestDate).map((date) => {
     const found = byDate.get(date);
-    const occupied = Number(found?.occupied_count || 0);
-    const empty = Number(found?.empty_count || 0);
+
+    let occupied = Number(found?.occupied_count || 0);
+    let empty = Number(found?.empty_count || 0);
+
+    if (selectedRoom !== "All" && !found) {
+      occupied = latestOccupied ? 1 : 0;
+      empty = latestOccupied ? 0 : 1;
+    }
+
     const warning =
-  Number(found?.warning_count || 0) +
-  Number(found?.avg_warnings || 0) +
-  Number(found?.complaint_count || 0);
+      Number(found?.warning_count || 0) +
+      Number(found?.avg_warnings || 0) +
+      Number(found?.complaint_count || 0);
 
-const violation =
-  Number(found?.violation_count || 0) +
-  Number(found?.critical_count || 0);
+    const violation =
+      Number(found?.violation_count || 0) +
+      Number(found?.critical_count || 0);
 
-const criticalNoiseCount = warning + violation;
+    const criticalNoiseCount = warning + violation;
     const totalBase = selectedRoom === "All" ? occupied + empty : Math.max(occupied + empty, 1);
+
     return {
       date,
       label: toShortLabel(date),
@@ -303,9 +315,7 @@ const criticalNoiseCount = warning + violation;
       inspection_count: Number(found?.inspection_count || 0),
       critical_noise_count: criticalNoiseCount,
       normal_noise_count:
-  criticalNoiseCount > 0
-    ? Math.max(totalBase - criticalNoiseCount, 0)
-    : totalBase
+        criticalNoiseCount > 0 ? Math.max(totalBase - criticalNoiseCount, 0) : totalBase
     };
   });
 }
@@ -596,7 +606,10 @@ export default function WardenDashboard() {
     return source.filter((room) => room.needs_inspection || String(room.occupancy_stat || "").toLowerCase() === "empty");
   }, [rooms, selectedRoomFilter, selectedRoomData, onlyAttention]);
 
-  const sevenDayHistory = useMemo(() => fillSevenDays(wardenHistory, selectedRoomFilter), [wardenHistory, selectedRoomFilter]);
+  const sevenDayHistory = useMemo(
+  () => fillSevenDays(wardenHistory, selectedRoomFilter, selectedRoomData),
+  [wardenHistory, selectedRoomFilter, selectedRoomData]
+);
   const occupancyTrend = useMemo(() => sevenDayHistory.map((item) => ({ date: item.date, label: item.label, occupied: item.occupied_count, empty: item.empty_count })), [sevenDayHistory]);
   const adjustedNoiseTrend = useMemo(() => sevenDayHistory.map((item) => ({ date: item.date, label: item.label, critical: item.critical_noise_count, normal: item.normal_noise_count })), [sevenDayHistory]);
 
