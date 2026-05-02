@@ -47,7 +47,7 @@ function extractRequestedDate(question, forecasts = []) {
 export default function ChatAssistant({ roomId = "All" }) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("Ask about critical alerts, inspection rooms, weekly patterns, anomalies, or forecasts.");
+  const [answer, setAnswer] = useState("Ask any Warden dashboard question. Answers are generated from live Warden APIs.");
   const [loading, setLoading] = useState(false);
 
   async function handleAsk() {
@@ -109,7 +109,7 @@ export default function ChatAssistant({ roomId = "All" }) {
               : `No forecast records are available for ${requestedRoom}.`
         );
       } else {
-        setAnswer("Ask: Which rooms have active alerts? Which rooms need inspection? What is the weekly pattern? Show anomalies. What is the forecast for A101 on 26 April?");
+        setAnswer("I can answer from the live Warden APIs about room status, occupied rooms, empty rooms, active alerts, inspection priority, weekly patterns, anomalies, forecasts, and data coverage. Please ask a Warden-related question.");
       }
     } catch (error) {
       setAnswer(error?.message || "Failed to load Warden data.");
@@ -136,14 +136,6 @@ export default function ChatAssistant({ roomId = "All" }) {
         </div>
 
         <div className="warden-chat-drawer-body">
-          <div className="warden-chat-suggestions">
-            <button onClick={() => setQuestion("Which rooms have active alerts?")}>Active alerts</button>
-            <button onClick={() => setQuestion("Which rooms need inspection?")}>Inspection rooms</button>
-            <button onClick={() => setQuestion("What is the weekly pattern?")}>Weekly pattern</button>
-            <button onClick={() => setQuestion("Show anomalies")}>Anomalies</button>
-            <button onClick={() => setQuestion("What is the predicted occupancy of 26 April in room A101?")}>Forecast</button>
-          </div>
-
           <div className="warden-chat-row">
             <input
               value={question}
