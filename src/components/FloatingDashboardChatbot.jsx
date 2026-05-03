@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
+import { HiOutlineChatBubbleLeftRight } from "react-icons/hi2";
 import { chatWithDashboardAgent } from "../api/client";
 import { useChatbotContext } from "../context/ChatbotContext";
 
 export default function FloatingDashboardChatbot() {
   const { chatConfig } = useChatbotContext();
+
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content:
-        "Ask about floors, rooms, trends, energy waste, anomalies, forecasts, or what action to take."
+      content: "Ask about this dashboard."
     }
   ]);
   const [input, setInput] = useState("");
@@ -17,10 +18,14 @@ export default function FloatingDashboardChatbot() {
 
   const role = chatConfig?.role || "owner";
   const dashboardState = chatConfig?.dashboardState || {
+    dashboard: "owner",
     floorId: "all",
-    roomId: "all"
+    roomId: "all",
+    selectedVisual: null,
+    selectedFilters: {}
   };
   const onAction = chatConfig?.onAction || null;
+  const selectedVisual = dashboardState?.selectedVisual || null;
 
   const title = useMemo(() => {
     switch (role) {
@@ -38,7 +43,7 @@ export default function FloatingDashboardChatbot() {
   }, [role]);
 
   const parseActions = (text) => {
-    const lines = text.split("\n");
+    const lines = String(text || "").split("\n");
     const actions = [];
 
     for (const line of lines) {
@@ -62,19 +67,8 @@ export default function FloatingDashboardChatbot() {
     return actions;
   };
 
-  const isNavigationRequest = (text) => {
-    const t = String(text || "").toLowerCase();
-    return (
-      t.includes("open ") ||
-      t.includes("go to ") ||
-      t.includes("switch to ") ||
-      t.includes("show me ") ||
-      t.includes("take me to ")
-    );
-  };
-
   const cleanReply = (text) =>
-    text
+    String(text || "")
       .split("\n")
       .filter((line) => {
         const t = line.trim();
@@ -87,33 +81,47 @@ export default function FloatingDashboardChatbot() {
       .join("\n")
       .trim();
 
+  const isNavigationRequest = (text) => {
+    const t = String(text || "").toLowerCase();
+    return (
+      t.includes("open ") ||
+      t.includes("go to ") ||
+      t.includes("switch to ") ||
+      t.includes("take me to ") ||
+      t.includes("show me ")
+    );
+  };
+
+  const sendPayload = async (userMessage) => {
+    const res = await chatWithDashboardAgent({
+      role,
+      message: userMessage,
+      dashboardState
+    });
+
+    const reply = res.reply || "I could not generate a response.";
+    const actions = parseActions(reply);
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: cleanReply(reply) }
+    ]);
+
+    if (actions.length && onAction && isNavigationRequest(userMessage)) {
+      onAction(actions);
+    }
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
 
     const userMessage = input.trim();
-
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setInput("");
     setLoading(true);
 
     try {
-      const res = await chatWithDashboardAgent({
-        role,
-        message: userMessage,
-        dashboardState
-      });
-
-      const reply = res.reply || "No response generated.";
-      const actions = parseActions(reply);
-
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: cleanReply(reply) }
-      ]);
-
-      if (actions.length && onAction && isNavigationRequest(userMessage)) {
-        onAction(actions);
-      }
+      await sendPayload(userMessage);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -127,26 +135,65 @@ export default function FloatingDashboardChatbot() {
     }
   };
 
+  const sendExplainVisual = async () => {
+    if (!selectedVisual || loading) return;
+
+    const userMessage = `Explain the currently selected visual: ${selectedVisual.title}`;
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setLoading(true);
+
+    try {
+      await sendPayload(userMessage);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Something went wrong while explaining the selected visual."
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       {isOpen && (
         <div className="floating-chatbot-panel">
           <div className="floating-chatbot-header">
-            <div>
-              <strong>{title}</strong>
-              <div className="floating-chatbot-subtitle">
-                Role: {role} | Floor: {dashboardState?.floorId || "all"} | Room:{" "}
-                {dashboardState?.roomId || "all"}
+            <div className="floating-chatbot-title-wrap">
+              <span className="floating-chatbot-status-dot" aria-hidden="true" />
+              <div>
+                <strong>{title}</strong>
+                <div className="floating-chatbot-subtitle">
+                  Dashboard: {dashboardState?.dashboard || "-"} | Floor:{" "}
+                  {dashboardState?.floorId || "all"} | Room:{" "}
+                  {dashboardState?.roomId || "all"}
+                </div>
               </div>
             </div>
+
             <button
               type="button"
               className="floating-chatbot-close"
               onClick={() => setIsOpen(false)}
+              aria-label="Close chatbot"
             >
-              ×
+              x
             </button>
           </div>
+
+          {selectedVisual && (
+            <button
+              type="button"
+              className="floating-chatbot-quick-btn"
+              onClick={sendExplainVisual}
+              disabled={loading}
+            >
+              Explain {selectedVisual.shortLabel || "Selected Visual"}
+            </button>
+          )}
 
           <div className="floating-chatbot-messages">
             {messages.map((msg, idx) => (
@@ -160,7 +207,7 @@ export default function FloatingDashboardChatbot() {
             <input
               type="text"
               value={input}
-              placeholder="Ask a question about this dashboard..."
+              placeholder="Ask a question..."
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -182,7 +229,7 @@ export default function FloatingDashboardChatbot() {
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label="Open chatbot"
       >
-        💬
+        <HiOutlineChatBubbleLeftRight />
       </button>
     </>
   );

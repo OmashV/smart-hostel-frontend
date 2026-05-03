@@ -1,7 +1,7 @@
 export default function DataTable({ columns, rows }) {
     return (
       <div className="table-wrap">
-        <table className="data-table">
+        <table className="warden-table">
           <thead>
             <tr>
               {columns.map((col) => (

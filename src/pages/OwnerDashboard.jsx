@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -40,6 +40,7 @@ import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import LoadingState from "../components/LoadingState";
 import StatusBadge from "../components/StatusBadge";
+import SelectableVisual from "../components/SelectableVisual";
 import { useChatbotContext } from "../context/ChatbotContext";
 
 function AlertCard({ alert, onResolve, onDelete }) {
@@ -177,7 +178,15 @@ function OwnerRoomTile({ room }) {
 }
 
 export default function OwnerDashboard() {
-  const { registerChatContext, clearChatContext } = useChatbotContext();
+  const {
+    chatConfig,
+    registerChatContext,
+    clearChatContext,
+    updateSelectedVisual
+  } = useChatbotContext();
+  const registerChatContextRef = useRef(registerChatContext);
+  const clearChatContextRef = useRef(clearChatContext);
+  const handleChatActionsRef = useRef(null);
   const [floorId, setFloorId] = useState("all");
   const [roomId, setRoomId] = useState("all");
   const [forecastDays, setForecastDays] = useState(() => {
@@ -208,6 +217,7 @@ export default function OwnerDashboard() {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
+  const selectedVisual = chatConfig?.dashboardState?.selectedVisual || null;
 
   useEffect(() => {
     try {
@@ -681,6 +691,17 @@ export default function OwnerDashboard() {
     setRoomId(payload.key);
   };
 
+  const handleHistoryPointSelect = (entry) => {
+    const point = entry?.activePayload?.[0]?.payload;
+    if (!point?.date) return;
+
+    setSelectedDay((prev) => ({
+      ...(prev || {}),
+      ...point,
+      date: point.date
+    }));
+  };
+
   const handleChatActions = useCallback((actions) => {
     actions.forEach((action) => {
       if (action.type === "switch_floor") {
@@ -694,26 +715,37 @@ export default function OwnerDashboard() {
     });
   }, []);
 
+  const isVisualSelected = useCallback(
+    (id) => selectedVisual?.id === id,
+    [selectedVisual]
+  );
+
   useEffect(() => {
-    registerChatContext({
+    registerChatContextRef.current = registerChatContext;
+    clearChatContextRef.current = clearChatContext;
+    handleChatActionsRef.current = handleChatActions;
+  }, [registerChatContext, clearChatContext, handleChatActions]);
+
+  useEffect(() => {
+    registerChatContextRef.current({
       role: "owner",
       dashboardState: {
+        dashboard: "owner",
         floorId,
-        roomId
+        roomId,
+        selectedFilters: {
+          floorId,
+          roomId,
+          forecastDays
+        }
       },
-      onAction: handleChatActions
+      onAction: handleChatActionsRef.current
     });
 
     return () => {
-      clearChatContext();
+      clearChatContextRef.current();
     };
-  }, [
-    floorId,
-    roomId,
-    handleChatActions,
-    registerChatContext,
-    clearChatContext
-  ]);
+  }, [floorId, roomId, forecastDays]);
 
   if (loading) return <LoadingState />;
 
@@ -731,35 +763,118 @@ export default function OwnerDashboard() {
       />
 
       <div className="stats-grid">
-        <StatCard
-          title="Total Energy Today"
-          value={formatKwh(kpis?.total_energy_today_kwh)}
-          subtitle="Current daily usage"
-          icon={<HiOutlineBolt />}
-          tone="orange"
-        />
-        <StatCard
-          title="Wasted Energy Today"
-          value={formatKwh(kpis?.wasted_energy_today_kwh)}
-          subtitle="Energy lost due to waste"
-          icon={<HiOutlineChartBarSquare />}
-          tone="purple"
-        />
-        <StatCard
-          title="Waste Ratio Today"
-          value={`${resolvedWasteRatio}%`}
-          subtitle="Compared with total usage"
-          icon={<HiOutlineBuildingOffice2 />}
-          tone="green"
-        />
+        <SelectableVisual
+          isSelected={isVisualSelected("kpi_total_energy")}
+          onSelect={() =>
+            updateSelectedVisual({
+              id: "kpi_total_energy",
+              title: "Total Energy Today",
+              shortLabel: "Total Energy KPI",
+              type: "kpi",
+              description: "Shows the total energy usage for the current dashboard scope.",
+              dataSummary: {
+                value: kpis?.total_energy_today_kwh || 0,
+                unit: "kWh",
+                floorId,
+                roomId
+              },
+              selectedItem: null,
+              source: "explicit_click"
+            })
+          }
+        >
+          <StatCard
+            title="Total Energy Today"
+            value={formatKwh(kpis?.total_energy_today_kwh)}
+            subtitle="Current daily usage"
+            icon={<HiOutlineBolt />}
+            tone="orange"
+          />
+        </SelectableVisual>
+        <SelectableVisual
+          isSelected={isVisualSelected("kpi_wasted_energy")}
+          onSelect={() =>
+            updateSelectedVisual({
+              id: "kpi_wasted_energy",
+              title: "Wasted Energy Today",
+              shortLabel: "Wasted Energy KPI",
+              type: "kpi",
+              description: "Shows the energy lost due to waste for the current dashboard scope.",
+              dataSummary: {
+                value: kpis?.wasted_energy_today_kwh || 0,
+                unit: "kWh",
+                floorId,
+                roomId
+              },
+              selectedItem: null,
+              source: "explicit_click"
+            })
+          }
+        >
+          <StatCard
+            title="Wasted Energy Today"
+            value={formatKwh(kpis?.wasted_energy_today_kwh)}
+            subtitle="Energy lost due to waste"
+            icon={<HiOutlineChartBarSquare />}
+            tone="purple"
+          />
+        </SelectableVisual>
+        <SelectableVisual
+          isSelected={isVisualSelected("kpi_waste_ratio")}
+          onSelect={() =>
+            updateSelectedVisual({
+              id: "kpi_waste_ratio",
+              title: "Waste Ratio Today",
+              shortLabel: "Waste Ratio KPI",
+              type: "kpi",
+              description: "Shows the percentage of total usage that became wasted energy.",
+              dataSummary: {
+                value: resolvedWasteRatio,
+                unit: "%",
+                floorId,
+                roomId
+              },
+              selectedItem: null,
+              source: "explicit_click"
+            })
+          }
+        >
+          <StatCard
+            title="Waste Ratio Today"
+            value={`${resolvedWasteRatio}%`}
+            subtitle="Compared with total usage"
+            icon={<HiOutlineBuildingOffice2 />}
+            tone="green"
+          />
+        </SelectableVisual>
 
-        <StatCard
-          title="Current Waste Status"
-          value={resolvedWasteStatus}
-          subtitle="Latest room waste condition"
-          icon={<HiOutlineExclamationTriangle />}
-          tone="red"
-        />
+        <SelectableVisual
+          isSelected={isVisualSelected("kpi_current_waste_status")}
+          onSelect={() =>
+            updateSelectedVisual({
+              id: "kpi_current_waste_status",
+              title: "Current Waste Status",
+              shortLabel: "Waste Status KPI",
+              type: "kpi",
+              description: "Shows the latest waste condition for the current dashboard scope.",
+              dataSummary: {
+                value: resolvedWasteStatus,
+                floorId,
+                roomId
+              },
+              selectedItem: null,
+              source: "explicit_click"
+            })
+          }
+        >
+          <StatCard
+            title="Current Waste Status"
+            value={resolvedWasteStatus}
+            subtitle="Latest room waste condition"
+            icon={<HiOutlineExclamationTriangle />}
+            tone="red"
+          />
+        </SelectableVisual>
       </div>
 
       {roomId === "all" ? (
@@ -767,87 +882,218 @@ export default function OwnerDashboard() {
           <SectionCard title="Room Overview">
             {overviewComparison.data.length ? (
               <>
-                <div
-                  style={{
-                    marginBottom: "10px",
-                    color: "#64748b",
-                    fontSize: "14px"
-                  }}
+                <SelectableVisual
+                  isSelected={isVisualSelected("overview_energy_comparison")}
+                  onSelect={() =>
+                    updateSelectedVisual({
+                      id: "overview_energy_comparison",
+                      title:
+                        floorId === "all"
+                          ? "Floor-wise Energy Comparison"
+                          : `${floorId} Room-wise Energy Comparison`,
+                      shortLabel:
+                        floorId === "all"
+                          ? "Floor Comparison Chart"
+                          : "Room Comparison Chart",
+                      type: "bar_chart",
+                      description:
+                        floorId === "all"
+                          ? "Compares total and wasted energy across floors."
+                          : "Compares total and wasted energy across rooms in the selected floor.",
+                      dataSummary: overviewComparison.data,
+                      selectedItem: null,
+                      source: "explicit_click"
+                    })
+                  }
                 >
-                  {floorId === "all"
-                    ? "Comparing total energy and wasted energy across floors. Click a bar to drill into a floor."
-                    : "Comparing total energy and wasted energy across rooms in the selected floor. Click a bar to drill into a room."}
-                </div>
-
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart
-                    data={overviewComparison.data}
-                    onClick={handleOverviewChartClick}
-                    margin={{ top: 12, right: 18, left: 0, bottom: 8 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: "#64748b", fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={{ stroke: "#e2e8f0" }}
-                    />
-                    <YAxis
-                      tick={{ fill: "#64748b", fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={{ stroke: "#e2e8f0" }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "#ffffff",
-                        border: "1px solid #dbe2ea",
-                        borderRadius: "12px",
-                        color: "#172033",
-                        boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
+                  <div>
+                    <div
+                      style={{
+                        marginBottom: "10px",
+                        color: "#64748b",
+                        fontSize: "14px"
                       }}
-                      formatter={(value, name) => [
-                        `${Number(value || 0).toFixed(2)} kWh`,
-                        name === "total_energy_kwh"
-                          ? "Total Energy"
-                          : "Wasted Energy"
-                      ]}
-                    />
-                    <Legend
-                      formatter={(value) =>
-                        value === "total_energy_kwh"
-                          ? "Total Energy"
-                          : "Wasted Energy"
-                      }
-                    />
-                    <Bar
-                      dataKey="total_energy_kwh"
-                      name="total_energy_kwh"
-                      fill="#3b82f6"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="wasted_energy_kwh"
-                      name="wasted_energy_kwh"
-                      fill="#f59e0b"
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                    >
+                      {floorId === "all"
+                        ? "Comparing total energy and wasted energy across floors."
+                        : "Comparing total energy and wasted energy across rooms in the selected floor."}
+                    </div>
+
+                    <ResponsiveContainer width="100%" height={320}>
+                      <BarChart
+                        data={overviewComparison.data}
+                        onClick={handleOverviewChartClick}
+                        margin={{ top: 12, right: 18, left: 0, bottom: 8 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fill: "#64748b", fontSize: 12 }}
+                          tickLine={false}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <YAxis
+                          tick={{ fill: "#64748b", fontSize: 12 }}
+                          tickLine={false}
+                          axisLine={{ stroke: "#e2e8f0" }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "#ffffff",
+                            border: "1px solid #dbe2ea",
+                            borderRadius: "12px",
+                            color: "#172033",
+                            boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
+                          }}
+                          formatter={(value, name) => [
+                            `${Number(value || 0).toFixed(2)} kWh`,
+                            name === "total_energy_kwh"
+                              ? "Total Energy"
+                              : "Wasted Energy"
+                          ]}
+                        />
+                        <Legend
+                          formatter={(value) =>
+                            value === "total_energy_kwh"
+                              ? "Total Energy"
+                              : "Wasted Energy"
+                          }
+                        />
+                        <Bar
+                          dataKey="total_energy_kwh"
+                          name="total_energy_kwh"
+                          fill="#3b82f6"
+                          radius={[8, 8, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="wasted_energy_kwh"
+                          name="wasted_energy_kwh"
+                          fill="#f59e0b"
+                          radius={[8, 8, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </SelectableVisual>
 
                 {roomId === "all" && roomsOverview.length > 0 && (
-                  <div style={{ marginTop: "18px" }} className="owner-room-grid">
-                    {roomsOverview.map((room) => (
-                      <OwnerRoomTile key={room.room_id} room={room} />
-                    ))}
-                  </div>
+                  <SelectableVisual
+                    isSelected={isVisualSelected("room_overview_grid")}
+                    onSelect={() =>
+                      updateSelectedVisual({
+                        id: "room_overview_grid",
+                        title: "Room Overview Cards",
+                        shortLabel: "Room Overview Cards",
+                        type: "card_grid",
+                        description:
+                          "Shows the current room overview cards for the selected scope, including energy, waste, waste ratio, and alert condition.",
+                        dataSummary: roomsOverview.map((room) => ({
+                          room_id: room.room_id,
+                          floor_id: room.floor_id,
+                          total_energy_kwh: room.total_energy_kwh,
+                          wasted_energy_kwh: room.wasted_energy_kwh,
+                          waste_ratio_percent: room.waste_ratio_percent,
+                          waste_stat: room.waste_stat,
+                          alert_count: room.alert_count
+                        })),
+                        selectedItem: null,
+                        source: "explicit_click"
+                      })
+                    }
+                  >
+                    <div style={{ marginTop: "18px" }} className="owner-room-grid">
+                      {roomsOverview.map((room) => (
+                        <SelectableVisual
+                          key={room.room_id}
+                          isSelected={isVisualSelected(`room_card_${room.room_id}`)}
+                          onSelect={() =>
+                            updateSelectedVisual({
+                              id: `room_card_${room.room_id}`,
+                              title: `${room.room_id} Room Overview`,
+                              shortLabel: `${room.room_id} Room Card`,
+                              type: "room_card",
+                              description:
+                                "Shows the room's energy, waste, waste ratio, alert count, and waste condition.",
+                              dataSummary: {
+                                room_id: room.room_id,
+                                floor_id: room.floor_id,
+                                total_energy_kwh: room.total_energy_kwh,
+                                wasted_energy_kwh: room.wasted_energy_kwh,
+                                waste_ratio_percent: room.waste_ratio_percent,
+                                waste_stat: room.waste_stat,
+                                noise_stat: room.noise_stat,
+                                alert_count: room.alert_count
+                              },
+                              selectedItem: room,
+                              source: "explicit_click"
+                            })
+                          }
+                        >
+                          <OwnerRoomTile room={room} />
+                        </SelectableVisual>
+                      ))}
+                    </div>
+                  </SelectableVisual>
                 )}
               </>
             ) : roomId === "all" && roomsOverview.length > 0 ? (
-              <div className="owner-room-grid">
-                {roomsOverview.map((room) => (
-                  <OwnerRoomTile key={room.room_id} room={room} />
-                ))}
-              </div>
+              <SelectableVisual
+                isSelected={isVisualSelected("room_overview_grid")}
+                onSelect={() =>
+                  updateSelectedVisual({
+                    id: "room_overview_grid",
+                    title: "Room Overview Cards",
+                    shortLabel: "Room Overview Cards",
+                    type: "card_grid",
+                    description:
+                      "Shows the current room overview cards for the selected scope, including energy, waste, waste ratio, and alert condition.",
+                    dataSummary: roomsOverview.map((room) => ({
+                      room_id: room.room_id,
+                      floor_id: room.floor_id,
+                      total_energy_kwh: room.total_energy_kwh,
+                      wasted_energy_kwh: room.wasted_energy_kwh,
+                      waste_ratio_percent: room.waste_ratio_percent,
+                      waste_stat: room.waste_stat,
+                      alert_count: room.alert_count
+                    })),
+                    selectedItem: null,
+                    source: "explicit_click"
+                  })
+                }
+              >
+                <div className="owner-room-grid">
+                  {roomsOverview.map((room) => (
+                    <SelectableVisual
+                      key={room.room_id}
+                      isSelected={isVisualSelected(`room_card_${room.room_id}`)}
+                      onSelect={() =>
+                        updateSelectedVisual({
+                          id: `room_card_${room.room_id}`,
+                          title: `${room.room_id} Room Overview`,
+                          shortLabel: `${room.room_id} Room Card`,
+                          type: "room_card",
+                          description:
+                            "Shows the room's energy, waste, waste ratio, alert count, and waste condition.",
+                          dataSummary: {
+                            room_id: room.room_id,
+                            floor_id: room.floor_id,
+                            total_energy_kwh: room.total_energy_kwh,
+                            wasted_energy_kwh: room.wasted_energy_kwh,
+                            waste_ratio_percent: room.waste_ratio_percent,
+                            waste_stat: room.waste_stat,
+                            noise_stat: room.noise_stat,
+                            alert_count: room.alert_count
+                          },
+                          selectedItem: room,
+                          source: "explicit_click"
+                        })
+                      }
+                    >
+                      <OwnerRoomTile room={room} />
+                    </SelectableVisual>
+                  ))}
+                </div>
+              </SelectableVisual>
             ) : (
               <p>No overview data available.</p>
             )}
@@ -874,7 +1120,27 @@ export default function OwnerDashboard() {
         <>
           <SectionCard title="Historical and Forecasted Energy Trend">
             <ResponsiveContainer width="100%" height={360}>
-              <ComposedChart data={chartData}>
+              <ComposedChart
+                className="history-chart"
+                data={chartData}
+                onClick={(entry) => {
+                  const point = entry?.activePayload?.[0]?.payload || null;
+
+                  updateSelectedVisual({
+                    id: "energy_usage_history",
+                    title: "Energy Usage and Waste History",
+                    shortLabel: "History Chart",
+                    type: "composed",
+                    description:
+                      "Shows actual and forecasted energy and wasted energy over time.",
+                    dataSummary: chartData,
+                    selectedItem: point,
+                    source: "explicit_click"
+                  });
+
+                  handleHistoryPointSelect(entry);
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#d9e1ec" />
                 <XAxis
                   dataKey="date"
@@ -957,85 +1223,143 @@ export default function OwnerDashboard() {
             </ResponsiveContainer>
           </SectionCard>
 
-          <SectionCard title="Abnormal Waste Days">
-            {anomalies.length ? (
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Room</th>
-                      <th>Date</th>
-                      <th>Total Energy (kWh)</th>
-                      <th>Wasted Energy (kWh)</th>
-                      <th>Status</th>
-                      <th>Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {anomalies.map((item, idx) => (
-                      <tr key={idx}>
-                        <td>{item.room_id}</td>
-                        <td>{item.date}</td>
-                        <td>{Number(item.total_energy_kwh || 0).toFixed(2)}</td>
-                        <td>{Number(item.wasted_energy_kwh || 0).toFixed(2)}</td>
-                        <td>{item.status || "Abnormal"}</td>
-                        <td>{item.reason || "Unusual waste pattern detected"}</td>
+          <SelectableVisual
+            isSelected={isVisualSelected("abnormal_waste_days")}
+            onSelect={() =>
+              updateSelectedVisual({
+                id: "abnormal_waste_days",
+                title: "Abnormal Waste Days",
+                shortLabel: "Abnormal Waste Table",
+                type: "table",
+                description: "Lists abnormal waste days detected from analytics.",
+                dataSummary: anomalies,
+                selectedItem: null,
+                source: "explicit_click"
+              })
+            }
+          >
+            <SectionCard title="Abnormal Waste Days">
+              {anomalies.length ? (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Room</th>
+                        <th>Date</th>
+                        <th>Total Energy (kWh)</th>
+                        <th>Wasted Energy (kWh)</th>
+                        <th>Status</th>
+                        <th>Reason</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p>No abnormal waste days detected yet.</p>
-            )}
-          </SectionCard>
+                    </thead>
+                    <tbody>
+                      {anomalies.map((item, idx) => (
+                        <tr key={idx}>
+                          <td>{item.room_id}</td>
+                          <td>{item.date}</td>
+                          <td>{Number(item.total_energy_kwh || 0).toFixed(2)}</td>
+                          <td>{Number(item.wasted_energy_kwh || 0).toFixed(2)}</td>
+                          <td>{item.status || "Abnormal"}</td>
+                          <td>{item.reason || "Unusual waste pattern detected"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p>No abnormal waste days detected yet.</p>
+              )}
+            </SectionCard>
+          </SelectableVisual>
 
-          <SectionCard title="Weekly Pattern Discovery">
-            {weekdayPatterns.length ? (
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Day</th>
-                      <th>Type</th>
-                      <th>Usual Pattern</th>
-                      <th>Avg Energy (kWh)</th>
-                      <th>Avg Waste (kWh)</th>
-                      <th>Avg Waste Ratio</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {weekdayPatterns.map((item, idx) => (
-                      <tr key={idx}>
-                        <td>{item.weekday_name}</td>
-                        <td>{item.day_type}</td>
-                        <td>
-                          <span
-                            className={
-                              item.usual_pattern === "Efficient Usage"
-                                ? "badge ok"
-                                : item.usual_pattern === "Moderate Waste"
-                                ? "badge warning"
-                                : "badge danger"
-                            }
-                          >
-                            {item.usual_pattern}
-                          </span>
-                        </td>
-                        <td>{Number(item.avg_total_energy_kwh || 0).toFixed(2)}</td>
-                        <td>{Number(item.avg_wasted_energy_kwh || 0).toFixed(2)}</td>
-                        <td>{Number(item.avg_waste_ratio_percent || 0).toFixed(2)}%</td>
+          <SelectableVisual
+            isSelected={isVisualSelected("weekly_pattern_discovery")}
+            onSelect={() =>
+              updateSelectedVisual({
+                id: "weekly_pattern_discovery",
+                title: "Weekly Pattern Discovery",
+                shortLabel: "Weekly Pattern Discovery",
+                type: "table",
+                description:
+                  "Shows weekday-based waste patterns and highlights which days tend to be more wasteful or more efficient.",
+                dataSummary: weekdayPatterns,
+                selectedItem: null,
+                source: "explicit_click"
+              })
+            }
+          >
+            <SectionCard title="Weekly Pattern Discovery">
+              <div>
+              {weekdayPatterns.length ? (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Day</th>
+                        <th>Type</th>
+                        <th>Usual Pattern</th>
+                        <th>Avg Energy (kWh)</th>
+                        <th>Avg Waste (kWh)</th>
+                        <th>Avg Waste Ratio</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {weekdayPatterns.map((item, idx) => (
+                        <tr key={idx}>
+                          <td>{item.weekday_name}</td>
+                          <td>{item.day_type}</td>
+                          <td>
+                            <span
+                              className={
+                                item.usual_pattern === "Efficient Usage"
+                                  ? "badge ok"
+                                  : item.usual_pattern === "Moderate Waste"
+                                  ? "badge warning"
+                                  : "badge danger"
+                              }
+                            >
+                              {item.usual_pattern}
+                            </span>
+                          </td>
+                          <td>{Number(item.avg_total_energy_kwh || 0).toFixed(2)}</td>
+                          <td>{Number(item.avg_wasted_energy_kwh || 0).toFixed(2)}</td>
+                          <td>{Number(item.avg_waste_ratio_percent || 0).toFixed(2)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p>No weekday pattern discovery available yet.</p>
+              )}
               </div>
-            ) : (
-              <p>No weekday pattern discovery available yet.</p>
-            )}
-          </SectionCard>
-          <SectionCard title="Monthly Waste Calendar">
-            <div className="owner-calendar-wrap">
+            </SectionCard>
+          </SelectableVisual>
+          <SelectableVisual
+            isSelected={isVisualSelected("monthly_waste_calendar")}
+            onSelect={() =>
+              updateSelectedVisual({
+                id: "monthly_waste_calendar",
+                title: "Monthly Waste Calendar",
+                shortLabel: "Waste Calendar",
+                type: "calendar",
+                description: "Shows daily waste severity across the month.",
+                dataSummary: calendarDays
+                  .filter((d) => d.data)
+                  .map((d) => ({
+                    date: d.key,
+                    waste_status: d.data.waste_status,
+                    waste_ratio_percent: d.data.waste_ratio_percent,
+                    total_energy_kwh: d.data.total_energy_kwh,
+                    wasted_energy_kwh: d.data.wasted_energy_kwh
+                  })),
+                selectedItem: selectedDayData || null,
+                source: "explicit_click"
+              })
+            }
+          >
+            <SectionCard title="Monthly Waste Calendar">
+              <div className="owner-calendar-wrap">
               <div className="owner-calendar-toolbar">
                 <button
                   type="button"
@@ -1126,8 +1450,9 @@ export default function OwnerDashboard() {
                   <p>Click a colored date to view energy and waste details.</p>
                 )}
               </div>
-            </div>
-          </SectionCard>
+              </div>
+            </SectionCard>
+          </SelectableVisual>
         </>
       )}
     </div>
