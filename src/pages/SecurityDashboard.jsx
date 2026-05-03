@@ -28,6 +28,7 @@ import {
   getSecuritySuspiciousRooms,
   getSecurityTrend
 } from "../api/client";
+import { useChatbotContext } from "../context/ChatbotContext";
 
 import DataTable from "../components/DataTable";
 import EmptyState from "../components/EmptyState";
@@ -148,6 +149,20 @@ export default function SecurityDashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    registerChatContext({
+      role: "security",
+      dashboardState: {
+        floorId: "all",
+        roomId: selectedRoom
+      }
+    });
+
+    return () => {
+      clearChatContext();
+    };
+  }, [registerChatContext, clearChatContext, selectedRoom]);
 
   useEffect(() => {
     const id = setInterval(load, 30000);
