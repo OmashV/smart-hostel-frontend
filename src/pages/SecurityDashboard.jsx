@@ -36,7 +36,6 @@ import LoadingState from "../components/LoadingState";
 import SectionCard from "../components/SectionCard";
 import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
-import { useChatbotContext } from "../context/ChatbotContext";
 import { formatDate, formatDuration } from "../utils/format";
 
 function SeverityBadge({ value }) {
